@@ -49,6 +49,6 @@ env/
 *~
 
 # Training artifacts (optional - uncomment if these should be ignored)
-# manifests/
-# snapshots/
-# checkpoints/
+manifests/
+snapshots/
+checkpoints/

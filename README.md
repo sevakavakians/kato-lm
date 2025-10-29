@@ -27,13 +27,14 @@ A Python implementation of hierarchical concept-based learning using KATO (Knowl
 
 This project has been streamlined for clarity:
 
-### 📓 **Two Main Notebooks**
+### 📓 **Main Notebooks**
 
 1. **`training.ipynb`** - Train hierarchical models on real datasets
    - Hardware profiling and analysis
    - Real data from HuggingFace (WikiText, C4, RefinedWeb, etc.)
-   - Parallel workers for optimal speed
+   - Parallel workers for optimal speed (2-3x speedup)
    - Training history tracking
+   - Checkpoint/resume support with config validation
 
 2. **`analysis.ipynb`** - Analyze learned patterns
    - Session-independent analysis (works after kernel restarts)
@@ -41,15 +42,28 @@ This project has been streamlined for clarity:
    - Pattern inspection and cleanup
    - Training run comparisons
 
+3. **`hierarchy_metrics.ipynb`** - Comprehensive hierarchy quality analysis
+   - 15 metrics across 6 categories (compression, connectivity, information theory, etc.)
+   - Graph topology evaluation
+   - Training dynamics visualization
+   - Detailed interpretation guide
+
+4. **`hierarchy_dashboard.ipynb`** - Quick hierarchy health check
+   - 5-tier scoring system
+   - At-a-glance quality assessment
+   - Actionable recommendations
+   - Immediate issue detection
+
 ### 🛠️ **Essential Tools** (in `tools/` directory)
 
-- `hierarchical_learning.py` - Core training engine
-- `kato_client.py` - KATO API client
-- `streaming_dataset_loader.py` - HuggingFace dataset streaming
-- `training_history.py` - Training run tracking
-- `profiling_engine.py` - Real-time resource profiling
+- `hierarchical_learning.py` - Core training engine with batching (4-7x speedup)
+- `kato_client.py` - KATO API client with auto-recovery and session management
+- `streaming_dataset_loader.py` - HuggingFace dataset streaming with parallel workers
+- `training_history.py` - Training run tracking in SQLite
+- `training_estimator.py` - **NEW**: Data-driven time predictions from 29 historical runs
+- `profiling_engine.py` - Real-time CPU/memory/disk profiling during training
 - `hardware_analyzer_v2.py` - Hardware detection and benchmarking
-- `storage_estimator.py` - MongoDB storage estimation
+- `storage_estimator.py` - MongoDB storage estimation with Zipfian modeling
 - `scaling_analyzer.py` - Scaling analysis
 - `hardware_recommender.py` - Hardware recommendations
 
@@ -65,10 +79,19 @@ This project has been streamlined for clarity:
 # 1. Train a model
 jupyter notebook training.ipynb
 # → Run cells to train on real data with your chosen configuration
+# → Supports checkpoint/resume if training is interrupted
 
 # 2. Analyze results
 jupyter notebook analysis.ipynb
 # → Load training history, analyze patterns, compare runs
+
+# 3. Evaluate hierarchy quality (RECOMMENDED)
+jupyter notebook hierarchy_dashboard.ipynb
+# → Quick 5-tier health check with actionable recommendations
+
+# Or for detailed analysis:
+jupyter notebook hierarchy_metrics.ipynb
+# → 15 comprehensive metrics across 6 categories
 ```
 
 **Old notebooks moved to `archive/` for reference.**
@@ -1643,6 +1666,84 @@ The nodes are pre-configured with optimal settings for hierarchical learning:
 
 - `max_pattern_length=0`: Prevents auto-learning, giving you full control over when patterns are learned (at concept boundaries)
 - `stm_mode='CLEAR'`: Ensures STM is cleared after each learn operation, maintaining clean concept boundaries
+
+### Performance Optimization Configuration
+
+**⚡ Batching (4-7x speedup)**
+
+The `node0_batch_size` parameter accumulates multiple observations before making a single API call:
+
+```python
+# Default (no batching, slow)
+learner = HierarchicalConceptLearner(
+    nodes=nodes,
+    tokenizer_name='gpt2',
+    node0_batch_size=1  # One API call per chunk
+)
+
+# RECOMMENDED: Enable batching (4-7x faster)
+learner = HierarchicalConceptLearner(
+    nodes=nodes,
+    tokenizer_name='gpt2',
+    node0_batch_size=50  # Batch 50 chunks per API call
+)
+
+# Aggressive batching (for very large datasets)
+learner = HierarchicalConceptLearner(
+    nodes=nodes,
+    tokenizer_name='gpt2',
+    node0_batch_size=100  # Maximum batching
+)
+```
+
+**⚡ Parallel Workers (2-3x speedup)**
+
+```python
+from tools import train_from_streaming_dataset_parallel
+
+# Train with parallel workers (combines with batching!)
+stats = train_from_streaming_dataset_parallel(
+    dataset_key='wikitext',
+    max_samples=10000,
+    learner=learner,  # With node0_batch_size=50
+    profiler=profiler,
+    num_workers=3,  # RECOMMENDED: 2-4 workers
+    num_levels=4
+)
+
+# Total speedup: ~10-15x (batching × parallelism)
+```
+
+**Connection pool safety:** `workers × nodes ≤ 30` (to prevent database connection exhaustion)
+
+**📌 Checkpoint/Resume Configuration**
+
+```python
+# Training with checkpoints (auto-save progress every 5K samples)
+stats = train_from_streaming_dataset_parallel(
+    dataset_key='wikitext',
+    max_samples=100000,
+    learner=learner,
+    profiler=profiler,
+    checkpoint_interval=5000,  # Save every 5K samples
+    checkpoint_dir='./checkpoints',
+    resume_from_checkpoint=False  # Set True to resume interrupted training
+)
+
+# Resume after crash/interruption
+# 1. Set resume_from_checkpoint=True
+# 2. Use EXACT same learner configuration (validated automatically)
+# 3. Training skips already-processed samples
+stats = train_from_streaming_dataset_parallel(
+    dataset_key='wikitext',
+    max_samples=100000,
+    learner=learner,  # Must match checkpoint config!
+    profiler=profiler,
+    resume_from_checkpoint=True  # Resume from last checkpoint
+)
+```
+
+**Config validation:** System validates that your current learner configuration matches the checkpoint to prevent data corruption. Mismatches result in clear error messages with actionable fixes.
 
 ### Segmentation Configuration
 

@@ -486,6 +486,105 @@ node3: observe(chapter_pattern) ... learn() → book_pattern
 }
 ```
 
+### Performance Optimizations
+
+The system includes multiple optimization strategies for fast training on large datasets:
+
+#### 1. Node0 Batching (4-7x speedup)
+
+Instead of making one API call per token chunk, observations are accumulated and sent in batches:
+
+```python
+learner = HierarchicalConceptLearner(
+    nodes=nodes,
+    tokenizer_name='gpt2',
+    node0_batch_size=50  # Batch 50 chunks per API call
+)
+```
+
+**How it works:**
+- Accumulate N observations in memory
+- Send all N observations in single API call
+- Reduces network overhead and database round-trips
+- Typical speedup: 4-7x faster than `node0_batch_size=1`
+
+#### 2. Parallel Worker Processing (2-3x speedup)
+
+Multiple workers process dataset samples concurrently using isolated KATO sessions:
+
+```python
+stats = train_from_streaming_dataset_parallel(
+    dataset_key='wikitext',
+    max_samples=100000,
+    learner=learner,
+    profiler=profiler,
+    num_workers=3,  # 3 concurrent workers
+    num_levels=4
+)
+```
+
+**How it works:**
+- Each worker has its own KATOClient instances (one per node)
+- Thread-local storage reuses learner/segmenter per thread
+- Workers share MongoDB via KATO API (no lock contention)
+- **Connection safety**: `workers × nodes ≤ 30` enforced to prevent pool exhaustion
+- Typical speedup: 2-3x faster with 75% parallel efficiency
+
+**Combined speedup:** ~10-15x when using both batching + parallelism
+
+#### 3. Checkpoint/Resume System
+
+Long-running training sessions are protected against interruptions:
+
+```python
+stats = train_from_streaming_dataset_parallel(
+    dataset_key='wikitext',
+    max_samples=1000000,
+    learner=learner,
+    checkpoint_interval=5000,  # Save every 5K samples
+    resume_from_checkpoint=True  # Resume if interrupted
+)
+```
+
+**Features:**
+- Auto-saves progress every N samples (default: 5000)
+- Configuration validation prevents resuming with mismatched settings
+- Validates: num_nodes, chunk_sizes, tokenizer_name, node_ids, segmentation_mode
+- Clear error messages if configuration changed
+- Learned patterns persist in MongoDB (not lost on crash)
+
+**Why config validation matters:** Different configurations create different MongoDB databases. Resuming with wrong config would mix incompatible patterns.
+
+#### 4. Connection Pool Management
+
+Database connection exhaustion is prevented through validation:
+
+```python
+# System validates before training:
+connections_needed = num_workers * num_levels
+if connections_needed > 30:
+    raise ValueError("Too many connections - reduce workers")
+```
+
+**Guidelines:**
+- Safe limit: `workers × nodes ≤ 30`
+- Example: 3 workers × 5 nodes = 15 connections ✓ SAFE
+- Example: 6 workers × 5 nodes = 30 connections ⚠️ AT LIMIT
+- Example: 8 workers × 5 nodes = 40 connections ❌ UNSAFE
+
+**Why 30?** MongoDB default connection pool size with safety margin for other processes.
+
+#### 5. Session Auto-Recovery
+
+KATOClient includes resilience features for long-running training:
+
+- **Auto-recreation**: Sessions auto-recreate on 404 errors (expired/lost)
+- **STM recovery**: Attempts to restore STM state after recreation
+- **Exponential backoff**: Retries on transient failures (502/503/504)
+- **Timeout management**: 120s default timeout for training workloads
+
+This ensures training continues even if KATO sessions expire mid-run.
+
 ## Dataset Integration
 
 ### Supported Datasets
@@ -521,42 +620,72 @@ Estimated Time: 37.8 minutes
 
 ## Use Cases
 
-### 1. Hierarchical Text Generation ⭐ **PRIMARY USE CASE**
+### Current Capabilities (Implemented)
+
+#### 1. Hierarchical Pattern Learning ✅
+- Train on large-scale datasets (WikiText, C4, RefinedWeb, etc.) via streaming
+- Learn patterns at multiple abstraction levels (chunks → paragraphs → chapters → documents)
+- Store patterns in MongoDB with frequency statistics
+- Single-pass training with real-time pattern name propagation
+- Parallel worker processing with 10-15x combined speedup
+- Checkpoint/resume for long training sessions
+
+#### 2. Pattern Analysis and Discovery ✅
+- Session-independent analysis (works after kernel restarts)
+- Frequency distribution visualization and statistics
+- Zipfian distribution analysis with calibrated parameters
+- Pattern inspection and cleanup (remove low-frequency noise)
+- Training run comparison across different configurations
+- Hierarchy quality evaluation with 15 metrics across 6 categories
+
+#### 3. Language Model Research ✅
+- Study what patterns emerge at different levels of abstraction
+- Compare learned structures across different tokenizers (GPT-2, BERT, RoBERTa, etc.)
+- Analyze how frequency distributions change by level
+- Investigate symbolic vs. continuous representation approaches
+- Track training dynamics and resource usage via ProfilingEngine
+- Estimate training time from 29 historical runs
+
+#### 4. Document Understanding ✅
+- Identify common document structures through pattern analysis
+- Learn genre-specific patterns from large corpora
+- Discover organizational principles via hierarchical abstraction
+- Analyze structural similarity through shared patterns
+
+### Future Capabilities (Planned)
+
+#### 1. Hierarchical Text Generation ⭐ **PRIMARY FUTURE GOAL**
 - Generate coherent text at multiple scales (sentence, paragraph, chapter, book)
 - Sample from learned Markov chain probabilities at any hierarchy level
 - Unravel high-level patterns into lower-level structures
 - Create novel compositions with learned stylistic and structural patterns
 - Control generation granularity (fine-grained vs. coarse-grained)
 
-### 2. Language Model Research
-- Study what patterns emerge at different levels of abstraction
-- Compare learned structures across different tokenizers
-- Analyze how frequency distributions change by level
-- Investigate symbolic vs. continuous representation approaches
+**Status:** Not yet implemented. The infrastructure for learning patterns is complete; generation requires implementing pattern unraveling and sampling mechanisms.
 
-### 3. Text Compression
+#### 2. Text Compression (Planned)
 - Use pattern names as compressed representations
 - Hierarchical encoding of documents
 - Efficient storage of repeated structures
 - Lossless reconstruction via pattern unraveling
 
-### 4. Document Understanding
-- Identify common document structures (narrative, expository, argumentative)
-- Learn genre-specific patterns
-- Discover organizational principles in large corpora
-- Analyze structural similarity between documents
+**Status:** Pattern storage exists; decompression/reconstruction not implemented.
 
-### 5. Transfer Learning
+#### 3. Transfer Learning (Planned)
 - Pre-train hierarchical representations on large corpus
 - Transfer learned patterns to specific domains
 - Use high-level patterns for document classification
 - Fine-tune on domain-specific data
 
-### 6. Anomaly Detection
+**Status:** Training infrastructure exists; transfer mechanisms not implemented.
+
+#### 4. Anomaly Detection (Planned)
 - Identify unusual structures (low-frequency patterns)
 - Detect novel narrative forms
 - Flag out-of-distribution documents
 - Identify style deviations
+
+**Status:** Frequency statistics exist; anomaly detection algorithms not implemented.
 
 ## Design Decisions
 
@@ -608,25 +737,30 @@ Estimated Time: 37.8 minutes
    - Generate text at multiple scales (sentence, paragraph, chapter, book)
    - Evaluate generation quality and coherence
 
+   **Status:** Infrastructure complete (pattern learning, frequency statistics). Needs generation and unraveling algorithms.
+
 2. **Prediction-Based Transfer**
    - Use predictions from node0 to inform node1 input
    - Modeling functions: threshold, top-N, weighted
    - Already implemented, needs testing
 
-3. **Checkpointing**
+3. ✅ **Checkpointing** (IMPLEMENTED)
    - Save/resume training for long runs
-   - LearningTracker and TrainingCheckpoint classes ready
-   - Needs integration with main training loop
+   - Configuration validation prevents mismatched resume
+   - Auto-save every N samples (default: 5000)
 
-4. **Parallel Processing**
-   - Process multiple documents concurrently
-   - Separate KATO sessions per worker
-   - Aggregate patterns across workers
+4. ✅ **Parallel Processing** (IMPLEMENTED)
+   - Process multiple documents concurrently (2-3x speedup)
+   - Separate KATO sessions per worker (no lock contention)
+   - Thread-local storage for resource reuse
+   - Connection pool management (workers × nodes ≤ 30)
 
 5. **Pattern Content Analysis**
    - Inspect what tokens/patterns make up high-frequency patterns
    - Decode pattern names back to original content
    - Build pattern vocabulary
+
+   **Status:** Pattern data stored in MongoDB; decoding utilities not yet implemented.
 
 ### Long-Term Research Directions
 
@@ -784,7 +918,7 @@ Verify at: http://localhost:8000/docs
 - A framework for training multi-level pattern recognition systems
 - A demonstration of abstraction through symbolic pattern names
 - An experiment in bottom-up semantic understanding
-- **A hierarchical generative language model** using Markov chain probabilities and pattern unraveling
+- **A pattern learning infrastructure** designed for future hierarchical text generation
 
 ### What This Project Is Not
 
@@ -792,12 +926,13 @@ Verify at: http://localhost:8000/docs
 - **Not a neural network** (uses deterministic pattern matching)
 - **Not end-to-end differentiable** (symbolic discrete learning)
 - **Not gradient-based** (uses frequency statistics and pattern matching)
+- **Not currently a generative model** (generation planned but not yet implemented)
 
-### Text Generation Mechanism
+### Text Generation Mechanism (Planned)
 
-**Ultimate Goal: Hierarchical Text Generation**
+**Future Goal: Hierarchical Text Generation**
 
-The system will generate text through a top-down unraveling process:
+The infrastructure for learning patterns is complete. Text generation (not yet implemented) will work through a top-down unraveling process:
 
 1. **Top-Level Sampling** (e.g., node3 - book level)
    - Use Markov chain probabilities to sample a book-level pattern
