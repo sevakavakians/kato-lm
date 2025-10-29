@@ -1,0 +1,40 @@
+{
+  "training_id": "training_20251021_224456",
+  "timestamp": "2025-10-21T22:44:56.334599",
+  "nodes": {
+    "node0": {
+      "db_name": "node0_kato",
+      "node_id": "node0",
+      "chunk_size": 3,
+      "mode": "chunking"
+    },
+    "node1": {
+      "db_name": "node1_kato",
+      "node_id": "node1",
+      "chunk_size": 3,
+      "mode": "chunking"
+    },
+    "node2": {
+      "db_name": "node2_kato",
+      "node_id": "node2",
+      "chunk_size": 3,
+      "mode": "chunking"
+    },
+    "node3": {
+      "db_name": "node3_kato",
+      "node_id": "node3",
+      "chunk_size": 3,
+      "mode": "chunking"
+    },
+    "node4": {
+      "db_name": "node4_kato",
+      "node_id": "node4",
+      "chunk_size": 3,
+      "mode": "chunking"
+    }
+  },
+  "dataset": "wikitext",
+  "samples_trained": 100,
+  "tokenizer": "gpt2",
+  "metadata": {}
+}

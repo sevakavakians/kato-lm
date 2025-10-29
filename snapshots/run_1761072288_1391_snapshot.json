@@ -1,0 +1,310 @@
+{
+  "run_id": "run_1761072288_1391",
+  "timestamp": 1761072288.3136754,
+  "config": {
+    "num_levels": 5,
+    "chunk_sizes": [
+      7,
+      7,
+      7,
+      7,
+      7
+    ],
+    "tokenizer": "gpt2",
+    "batch_size": 50
+  },
+  "mongo_uri": "mongodb://kato-mongodb:27017/",
+  "nodes": {
+    "node0": {
+      "node_name": "node0",
+      "db_name": "node0_kato",
+      "db_size_mb": 0.5653266906738281,
+      "total_patterns": 1268,
+      "total_observations": 1271,
+      "frequency_histogram": {
+        "1": 1265,
+        "2": 3
+      },
+      "mean_frequency": 1.002365930599369,
+      "median_frequency": 1.0,
+      "max_frequency": 2,
+      "min_frequency": 1,
+      "std_frequency": 0.04858325814278057,
+      "zipf_alpha": null,
+      "zipf_r_squared": null,
+      "shannon_histogram": null,
+      "mean_shannon": null,
+      "median_shannon": null,
+      "top_patterns": [
+        {
+          "name": "276ecb91abb95a554a8d88d6d2dab56bbb7c624a",
+          "frequency": 2,
+          "length": 7
+        },
+        {
+          "name": "5862eb4c9fbcb8784a83a4ac06600ac58ead05ce",
+          "frequency": 2,
+          "length": 7
+        },
+        {
+          "name": "cfe59c0b65a99a0ad999e6c7c575386d72c0f13f",
+          "frequency": 2,
+          "length": 4
+        },
+        {
+          "name": "002825170d4a9a57b3abf571739d9896102e68cb",
+          "frequency": 1,
+          "length": 7
+        },
+        {
+          "name": "0029bef0837b20729a04e8eec2298e2585958243",
+          "frequency": 1,
+          "length": 7
+        },
+        {
+          "name": "00bb28b97e87db1ab8514f052e3999c3642a43f2",
+          "frequency": 1,
+          "length": 4
+        },
+        {
+          "name": "00f8deaf2b995fcb6927034117953902c0442c08",
+          "frequency": 1,
+          "length": 7
+        },
+        {
+          "name": "011497f6671386dbee0440cdee89fec3906984ff",
+          "frequency": 1,
+          "length": 7
+        },
+        {
+          "name": "01d60c6ecdbaca35f86b8bb264528f3e12097e71",
+          "frequency": 1,
+          "length": 8
+        },
+        {
+          "name": "01ff02920bec6d37a6832ac633e8632c0acccf1b",
+          "frequency": 1,
+          "length": 7
+        }
+      ],
+      "freq_1": 1265,
+      "freq_2_5": 3,
+      "freq_6_10": 0,
+      "freq_11_50": 0,
+      "freq_50_plus": 0
+    },
+    "node1": {
+      "node_name": "node1",
+      "db_name": "node1_kato",
+      "db_size_mb": 0.2524137496948242,
+      "total_patterns": 205,
+      "total_observations": 205,
+      "frequency_histogram": {
+        "1": 205
+      },
+      "mean_frequency": 1.0,
+      "median_frequency": 1.0,
+      "max_frequency": 1,
+      "min_frequency": 1,
+      "std_frequency": 0.0,
+      "zipf_alpha": null,
+      "zipf_r_squared": null,
+      "shannon_histogram": null,
+      "mean_shannon": null,
+      "median_shannon": null,
+      "top_patterns": [
+        {
+          "name": "045d354a98a95a5a60a6642423581d04705e54d3",
+          "frequency": 1,
+          "length": 7
+        },
+        {
+          "name": "0461056df7f08de517e7f31a489016de97b9eedd",
+          "frequency": 1,
+          "length": 7
+        },
+        {
+          "name": "053f3bd9e6d08ab11a4e47f5a89bec9461f27a5b",
+          "frequency": 1,
+          "length": 7
+        },
+        {
+          "name": "071a6bad18891d3af2e1154d91a92884b0e655c5",
+          "frequency": 1,
+          "length": 6
+        },
+        {
+          "name": "07ce62f4bcecf0a70ce550655715e28797331950",
+          "frequency": 1,
+          "length": 7
+        },
+        {
+          "name": "086296772bb438b8b321d2a7b46fed3b018d02a0",
+          "frequency": 1,
+          "length": 2
+        },
+        {
+          "name": "0943acd0068e37dbbc977ab388787fe29da9ecd6",
+          "frequency": 1,
+          "length": 3
+        },
+        {
+          "name": "0c374b7d8d2758c3df71a669d0c60e5278963ab6",
+          "frequency": 1,
+          "length": 7
+        },
+        {
+          "name": "0da438abdbc625d6d3ee21a92a11b0b1aeec8167",
+          "frequency": 1,
+          "length": 5
+        },
+        {
+          "name": "0f68d7f2132360cbc8ae7ec03ad401d8a16cca9a",
+          "frequency": 1,
+          "length": 2
+        }
+      ],
+      "freq_1": 205,
+      "freq_2_5": 0,
+      "freq_6_10": 0,
+      "freq_11_50": 0,
+      "freq_50_plus": 0
+    },
+    "node2": {
+      "node_name": "node2",
+      "db_name": "node2_kato",
+      "db_size_mb": 0.043463706970214844,
+      "total_patterns": 50,
+      "total_observations": 50,
+      "frequency_histogram": {
+        "1": 50
+      },
+      "mean_frequency": 1.0,
+      "median_frequency": 1.0,
+      "max_frequency": 1,
+      "min_frequency": 1,
+      "std_frequency": 0.0,
+      "zipf_alpha": null,
+      "zipf_r_squared": null,
+      "shannon_histogram": null,
+      "mean_shannon": null,
+      "median_shannon": null,
+      "top_patterns": [
+        {
+          "name": "03cfe4e5ac73230f8ee022118023eda63b32bf7a",
+          "frequency": 1,
+          "length": 4
+        },
+        {
+          "name": "07a761e61772e9ba9b20ccedb3bf7e57e8ed8618",
+          "frequency": 1,
+          "length": 2
+        },
+        {
+          "name": "0872dab1e9f4755e98bc61c8009383e116ea3300",
+          "frequency": 1,
+          "length": 4
+        },
+        {
+          "name": "17d7fad50a1381374f74377edc828ae3934db139",
+          "frequency": 1,
+          "length": 3
+        },
+        {
+          "name": "1915dba461689a0293a6a98907c98f04ec3c61ff",
+          "frequency": 1,
+          "length": 6
+        },
+        {
+          "name": "1cc82eade41ca101c476dc213dedffafe588c8e1",
+          "frequency": 1,
+          "length": 3
+        },
+        {
+          "name": "1deeec8d780888704c313a20d513fcf63a4316f7",
+          "frequency": 1,
+          "length": 3
+        },
+        {
+          "name": "1e73fff1e76d5e2e3e97e70f625be7db20785848",
+          "frequency": 1,
+          "length": 4
+        },
+        {
+          "name": "1fe19a88f1e7347387556fa33dac89a63b0c7d2a",
+          "frequency": 1,
+          "length": 2
+        },
+        {
+          "name": "21d4295ed1c56e9c72fee22e2acfdcfe70e49e17",
+          "frequency": 1,
+          "length": 5
+        }
+      ],
+      "freq_1": 50,
+      "freq_2_5": 0,
+      "freq_6_10": 0,
+      "freq_11_50": 0,
+      "freq_50_plus": 0
+    },
+    "node3": {
+      "node_name": "node3",
+      "db_name": "node3_kato",
+      "db_size_mb": 0.0001373291015625,
+      "total_patterns": 0,
+      "total_observations": 0,
+      "frequency_histogram": {},
+      "mean_frequency": 0.0,
+      "median_frequency": 0.0,
+      "max_frequency": 0,
+      "min_frequency": 0,
+      "std_frequency": 0.0,
+      "zipf_alpha": null,
+      "zipf_r_squared": null,
+      "shannon_histogram": null,
+      "mean_shannon": null,
+      "median_shannon": null,
+      "top_patterns": [],
+      "freq_1": 0,
+      "freq_2_5": 0,
+      "freq_6_10": 0,
+      "freq_11_50": 0,
+      "freq_50_plus": 0
+    },
+    "node4": {
+      "node_name": "node4",
+      "db_name": "node4_kato",
+      "db_size_mb": 0.0001373291015625,
+      "total_patterns": 0,
+      "total_observations": 0,
+      "frequency_histogram": {},
+      "mean_frequency": 0.0,
+      "median_frequency": 0.0,
+      "max_frequency": 0,
+      "min_frequency": 0,
+      "std_frequency": 0.0,
+      "zipf_alpha": null,
+      "zipf_r_squared": null,
+      "shannon_histogram": null,
+      "mean_shannon": null,
+      "median_shannon": null,
+      "top_patterns": [],
+      "freq_1": 0,
+      "freq_2_5": 0,
+      "freq_6_10": 0,
+      "freq_11_50": 0,
+      "freq_50_plus": 0
+    }
+  },
+  "total_patterns": 1523,
+  "total_storage_mb": 0.8614788055419922,
+  "total_observations": 1526,
+  "hierarchy_utilization": [
+    0.8325673013788575,
+    0.1346027577150361,
+    0.03282994090610637,
+    0.0,
+    0.0
+  ],
+  "snapshot_duration_seconds": 0.06638884544372559
+}

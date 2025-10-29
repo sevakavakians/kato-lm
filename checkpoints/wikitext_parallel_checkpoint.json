@@ -1,0 +1,13 @@
+{
+  "dataset_key": "wikitext",
+  "samples_attempted": 97000,
+  "samples_completed": 24801,
+  "samples_errored": 245,
+  "timestamp": 1761317254.9733062,
+  "elapsed_seconds": 133.05229830741882,
+  "worker_progress": {
+    "0": 0,
+    "1": 0,
+    "2": 0
+  }
+}
