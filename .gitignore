@@ -48,7 +48,15 @@ env/
 *.swo
 *~
 
-# Training artifacts (optional - uncomment if these should be ignored)
+# Training artifacts (generated during training, should not be committed)
 manifests/
 snapshots/
 checkpoints/
+training_history.db
+hardware_baseline.json
+*.json.tmp
+
+# Profiling and analysis outputs
+profiling_reports/
+*.pkl
+*.pickle
