@@ -1658,7 +1658,11 @@ class HierarchicalNode:
         base_url: str = "http://kato:8000",
         mode: str = 'chunking',
         chunk_size: int = 15,
-        min_sentence_tokens: int = 3
+        min_sentence_tokens: int = 3,
+        # KATO Configuration (Training Optimizations)
+        process_predictions: bool = False,  # Disable for training performance
+        max_pattern_length: int = 0,        # 0 = manual learning only
+        stm_mode: str = 'CLEAR'             # Clear STM after each learn
     ):
         """
         Initialize a hierarchical node configuration.
@@ -1675,6 +1679,15 @@ class HierarchicalNode:
                        - At node1+: number of pattern names per observation
             min_sentence_tokens: Minimum tokens per sentence (default: 3)
                                 Only used if mode='sentences' at node0
+            process_predictions: Enable/disable prediction processing (default: False)
+                                False = 2-3x faster training (predictions not computed)
+                                True = Predictions available (for interactive exploration)
+            max_pattern_length: Auto-learning threshold (default: 0)
+                               0 = Manual learning only (recommended for training)
+                               >0 = Auto-learn after N observations
+            stm_mode: Short-term memory mode (default: 'CLEAR')
+                     'CLEAR' = Clear STM after each learn (fresh context)
+                     'ROLLING' = Keep rolling window (for sequential tasks)
         """
         if mode not in ['chunking', 'sentences']:
             raise ValueError(f"mode must be 'chunking' or 'sentences', got: {mode}")
@@ -1684,6 +1697,10 @@ class HierarchicalNode:
         self.mode = mode
         self.chunk_size = chunk_size
         self.min_sentence_tokens = min_sentence_tokens
+        # KATO configuration
+        self.process_predictions = process_predictions
+        self.max_pattern_length = max_pattern_length
+        self.stm_mode = stm_mode
         self.kato_client = None  # Created by HierarchicalConceptLearner
 
     def __repr__(self):
@@ -1815,9 +1832,9 @@ class HierarchicalConceptLearner:
         for node_config in self.node_configs:
             node_config.kato_client = KATOClient(
                 node_id=node_config.name,  # node0, node1, node2, etc. (simple and clean)
-                max_pattern_length=0,  # Manual learning only
-                stm_mode='CLEAR',      # Clear STM after each learn
-                process_predictions=False,  # Disable predictions during training
+                max_pattern_length=node_config.max_pattern_length,  # From node config
+                stm_mode=node_config.stm_mode,                      # From node config
+                process_predictions=node_config.process_predictions,  # From node config
                 base_url=node_config.base_url
             )
             self.nodes[node_config.name] = node_config.kato_client
@@ -1831,9 +1848,11 @@ class HierarchicalConceptLearner:
         # Print configuration summary
         if verbose_init:
             print(f"\n✓ {self.num_nodes} nodes initialized with:")
-            print("  - max_pattern_length = 0 (manual learning)")
-            print("  - stm_mode = CLEAR (STM clears after learn)")
-            print("  - process_predictions = False (predictions disabled)")
+            # Show KATO configuration from first node (assuming all nodes use same KATO config)
+            first_node_config = self.node_configs[0]
+            print(f"  - max_pattern_length = {first_node_config.max_pattern_length} ({'manual learning' if first_node_config.max_pattern_length == 0 else 'auto-learning'})")
+            print(f"  - stm_mode = {first_node_config.stm_mode} ({'STM clears after learn' if first_node_config.stm_mode == 'CLEAR' else 'rolling window'})")
+            print(f"  - process_predictions = {first_node_config.process_predictions} ({'predictions disabled' if not first_node_config.process_predictions else 'predictions enabled'})")
             print(f"  - tokenizer = {tokenizer_name}")
 
             # Show per-node config if custom nodes, else show global config

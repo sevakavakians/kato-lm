@@ -971,14 +971,18 @@ class StreamingDatasetLoader:
                     # Import here to avoid circular dependency
                     from tools.hierarchical_learning import HierarchicalConceptLearner
 
-                    # Create worker-specific learner (clones node configs)
+                    # Create worker-specific learner (clones node configs including KATO settings)
                     worker_nodes = [
                         HierarchicalNode(
                             name=node.name,
                             base_url=node.base_url,
                             mode=node.mode,
                             chunk_size=node.chunk_size,
-                            min_sentence_tokens=node.min_sentence_tokens
+                            min_sentence_tokens=node.min_sentence_tokens,
+                            # Clone KATO configuration
+                            process_predictions=node.process_predictions,
+                            max_pattern_length=node.max_pattern_length,
+                            stm_mode=node.stm_mode
                         )
                         for node in learner.node_configs
                     ]
