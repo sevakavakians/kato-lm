@@ -76,6 +76,106 @@ Not:
 observations = [{'strings': tokens}]  # ✗ Wrong - loses order
 ```
 
+## CRITICAL: KATO Prediction Structure (Text Generation)
+
+**⚠️ When working with predictions, use `pred['present']` NOT `pred['name']`:**
+
+KATO predictions contain multiple fields with distinct purposes:
+
+```python
+{
+    'name': 'hash_id',                  # Pattern identifier (lookup key)
+    'present': [['tok1'], ['tok2']],    # Actual matched sequence (KATO events)
+    'future': [['tok3']],                # Predicted next tokens/patterns
+    'matches': ['tok1', 'tok2'],        # Simplified matched tokens
+    'confidence': 0.95,                  # Prediction metrics
+    'potential': 0.87,
+    # ... other metrics
+}
+```
+
+### The Critical Distinction
+
+**`pred['name']`** (Pattern Hash):
+- Just an identifier like `"6850d8ef6abf023e778693c4d5d9986db464e5cd"`
+- Used to look up the **full stored pattern** via API
+- The stored pattern contains the **entire training sequence**, including future tokens
+- ❌ **DO NOT use for text generation** - causes repetition!
+
+**`pred['present']`** (Matched Sequence):
+- Contains the **exact matched tokens** in KATO event format
+- Represents only what was actually matched, no more, no less
+- No API lookup needed - direct extraction
+- ✅ **USE THIS for text generation** - prevents repetition!
+
+### Why Using `pred['name']` Causes Repetition
+
+When you look up a pattern by `pred['name']`, KATO returns the **full stored pattern from training time**, which includes tokens beyond what was actually matched:
+
+```python
+# ❌ WRONG APPROACH:
+pattern_name = pred['name']  # "6850d8ef6abf..."
+present_tokens = unravel_pattern(pattern_name, ...)  # API lookup
+# Returns: ['Among', 'fl', 'ukes', ',', 'the', 'most', 'common', 'in']
+#                                                                  ↑↑
+#                                              From training sequence!
+
+future_tokens = unravel_future_list(pred['future'], ...)
+# Returns: ['in']  ← Same token!
+
+combined = present_tokens + future_tokens
+# Result: "...common in in"  ❌ REPETITION!
+```
+
+### Correct Approach - Use `pred['present']`
+
+```python
+# ✅ CORRECT APPROACH:
+present_events = pred.get('present', [])  # Matched sequence
+present_tokens = extract_tokens_from_present(present_events)
+# Returns: ['Among', 'fl', 'ukes', ',', 'the', 'most', 'common']
+#                                                              ↑
+#                                              Stops exactly here!
+
+future_tokens = unravel_future_list(pred['future'], ...)
+# Returns: ['in']
+
+combined = present_tokens + future_tokens
+# Result: "...common in"  ✓ NO REPETITION!
+```
+
+### Helper Function
+
+```python
+def extract_tokens_from_present(present_events):
+    """Extract tokens directly from pred['present'] field."""
+    if not present_events:
+        return []
+
+    tokens = []
+    for event in present_events:
+        if event and len(event) > 0:
+            tokens.append(event[0])  # Take first string from event
+
+    return tokens
+```
+
+### When This Matters
+
+This distinction is **critical** when:
+- Implementing text generation (combining present + future)
+- Unraveling predictions to tokens
+- Decoding hierarchical patterns for output
+
+This distinction is **not relevant** when:
+- Just storing pattern names for training
+- Analyzing pattern frequencies
+- Working with pattern identifiers
+
+### Reference
+
+See `GENERATION_FIX_SUMMARY.md` for complete details on the bug fix that discovered this issue.
+
 ## Token Chunking Strategy
 
 **Why Fixed-Length Chunking:**

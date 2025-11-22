@@ -29,26 +29,40 @@ This project has been streamlined for clarity:
 
 ### 📓 **Main Notebooks**
 
-1. **`training.ipynb`** - Train hierarchical models on real datasets
+1. **`training_v2.ipynb`** - **NEW! Educational training with explicit KATO API** ⭐
+   - TensorFlow/PyTorch-style layer configuration
+   - Explicit KATO calls visible (observe, learn, get_predictions)
+   - Perfect for learning and experimentation
+   - Flexible metadata handling per layer
+   - Step-by-step educational demos
+
+2. **`training.ipynb`** - Production training on real datasets
    - Hardware profiling and analysis
    - Real data from HuggingFace (WikiText, C4, RefinedWeb, etc.)
    - Parallel workers for optimal speed (2-3x speedup)
    - Training history tracking
    - Checkpoint/resume support with config validation
 
-2. **`analysis.ipynb`** - Analyze learned patterns
+3. **`generation.ipynb`** - Text generation with hierarchical predictions
+   - Bottom-up activation (input → predictions)
+   - Top-down unraveling (patterns → tokens)
+   - Explicit KATO API calls (educational)
+   - MongoDB pattern retrieval
+   - ⚠️ **Critical:** Uses `pred['present']` (not `pred['name']`) to avoid token repetition
+
+4. **`analysis.ipynb`** - Analyze learned patterns
    - Session-independent analysis (works after kernel restarts)
    - Frequency distributions and visualizations
    - Pattern inspection and cleanup
    - Training run comparisons
 
-3. **`hierarchy_metrics.ipynb`** - Comprehensive hierarchy quality analysis
+5. **`hierarchy_metrics.ipynb`** - Comprehensive hierarchy quality analysis
    - 15 metrics across 6 categories (compression, connectivity, information theory, etc.)
    - Graph topology evaluation
    - Training dynamics visualization
    - Detailed interpretation guide
 
-4. **`hierarchy_dashboard.ipynb`** - Quick hierarchy health check
+6. **`hierarchy_dashboard.ipynb`** - Quick hierarchy health check
    - 5-tier scoring system
    - At-a-glance quality assessment
    - Actionable recommendations
@@ -56,11 +70,12 @@ This project has been streamlined for clarity:
 
 ### 🛠️ **Essential Tools** (in `tools/` directory)
 
+- `hierarchical_builder.py` - **NEW**: Layer-based API for educational training (v2.0)
 - `hierarchical_learning.py` - Core training engine with batching (4-7x speedup)
 - `kato_client.py` - KATO API client with auto-recovery and session management
 - `streaming_dataset_loader.py` - HuggingFace dataset streaming with parallel workers
 - `training_history.py` - Training run tracking in SQLite
-- `training_estimator.py` - **NEW**: Data-driven time predictions from 29 historical runs
+- `training_estimator.py` - Data-driven time predictions from 29 historical runs
 - `profiling_engine.py` - Real-time CPU/memory/disk profiling during training
 - `hardware_analyzer_v2.py` - Hardware detection and benchmarking
 - `storage_estimator.py` - MongoDB storage estimation with Zipfian modeling
@@ -77,15 +92,28 @@ This project has been streamlined for clarity:
 
 ```bash
 # 1. Train a model
+
+# For learning/experimentation (RECOMMENDED for beginners):
+jupyter notebook training_v2.ipynb
+# → Educational approach with explicit KATO API calls
+# → TensorFlow/PyTorch-style layer configuration
+# → Perfect for understanding the mechanics
+
+# For production training:
 jupyter notebook training.ipynb
 # → Run cells to train on real data with your chosen configuration
 # → Supports checkpoint/resume if training is interrupted
 
-# 2. Analyze results
+# 2. Generate text (optional)
+jupyter notebook generation.ipynb
+# → Test hierarchical text generation
+# → Bottom-up activation + top-down unraveling
+
+# 3. Analyze results
 jupyter notebook analysis.ipynb
 # → Load training history, analyze patterns, compare runs
 
-# 3. Evaluate hierarchy quality (RECOMMENDED)
+# 4. Evaluate hierarchy quality (RECOMMENDED)
 jupyter notebook hierarchy_dashboard.ipynb
 # → Quick 5-tier health check with actionable recommendations
 
@@ -93,6 +121,14 @@ jupyter notebook hierarchy_dashboard.ipynb
 jupyter notebook hierarchy_metrics.ipynb
 # → 15 comprehensive metrics across 6 categories
 ```
+
+### 🎓 **Learning Path**
+
+**New to KATO hierarchical learning?**
+1. Start with `training_v2.ipynb` - See explicit KATO API calls
+2. Experiment with `generation.ipynb` - Understand predictions
+3. Analyze with `analysis.ipynb` - Inspect learned patterns
+4. Scale up with `training.ipynb` - Production training
 
 **Old notebooks moved to `archive/` for reference.**
 
@@ -327,6 +363,78 @@ learner.process_corpus(corpus, verbose=True)
 learner.tracker.print_summary()
 visualize_hierarchical_stats(learner)
 ```
+
+### 1a. Educational Training (v2.0) - **RECOMMENDED for Beginners** ⭐
+
+**NEW!** Layer-based API with explicit KATO calls (see `training_v2.ipynb`):
+
+```python
+from tools.hierarchical_builder import HierarchicalBuilder
+
+# Create hierarchy with TensorFlow/PyTorch-style API
+hierarchy = HierarchicalBuilder(tokenizer_name='gpt2')
+
+# Add layers with explicit configuration
+hierarchy.add_layer(
+    name='node0',
+    chunk_size=15,              # Tokens per chunk
+    max_predictions=10,         # Top predictions to next layer
+    prediction_field='name',    # Field to extract
+    recall_threshold=0.6,       # Pattern matching strictness
+    capture_metadata=False      # Don't capture metadata here
+)
+
+hierarchy.add_layer(
+    name='node1',
+    chunk_size=15,
+    max_predictions=8,
+    prediction_field='name',
+    capture_metadata=False      # Don't capture metadata here
+)
+
+hierarchy.add_layer(name='node2', chunk_size=15, max_predictions=6, prediction_field='name', capture_metadata=True)
+hierarchy.add_layer(name='node3', chunk_size=15, max_predictions=4, prediction_field='name', capture_metadata=True)
+
+# Build and see summary
+model = hierarchy.build()
+model.summary()
+
+# Output:
+# ================================================================================
+# HIERARCHICAL MODEL SUMMARY
+# ================================================================================
+# Tokenizer: gpt2
+# Total Layers: 4
+#
+# Layer      Name       Chunk    MaxPred  Recall   STM Mode   Metadata
+# --------------------------------------------------------------------------------
+# 0          node0      15       10       0.60     CLEAR      No
+# 1          node1      15       8        0.60     CLEAR      Yes
+# 2          node2      15       6        0.60     CLEAR      Yes
+# 3          node3      15       4        0.60     CLEAR      Yes
+# ================================================================================
+#
+# Receptive Fields (token coverage):
+#   node0: 15 tokens
+#   node1: 225 tokens
+#   node2: 3,375 tokens
+#   node3: 50,625 tokens
+
+# Process samples (see training_v2.ipynb for complete examples)
+# The notebook shows EXPLICIT KATO API calls:
+#   - model.layers[0].client.observe_sequence(...)
+#   - model.layers[0].client.learn()
+#   - model.layers[1].client.observe(...)
+# Users see exactly what's happening!
+```
+
+**Why v2.0?**
+- 🎓 **Educational**: See exact KATO API calls (`observe()`, `learn()`, `get_predictions()`)
+- 🔧 **Flexible**: Configure each layer independently
+- 🎯 **Familiar**: TensorFlow/PyTorch-style API
+- 📊 **Transparent**: All settings visible
+
+**See `training_v2.ipynb` for complete step-by-step examples!**
 
 ### 2. Run the Built-in Demo
 
