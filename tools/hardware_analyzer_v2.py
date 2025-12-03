@@ -32,15 +32,15 @@ from tools.hardware_analyzer import HardwareAnalyzer
 
 
 @dataclass
-class MongoDBBenchmark:
-    """MongoDB performance benchmark results"""
-    write_speed_docs_per_sec: float
-    read_speed_docs_per_sec: float
-    avg_write_latency_ms: float
-    avg_read_latency_ms: float
-    connection_latency_ms: float
-    available: bool = True
-    error_message: Optional[str] = None
+class ClickHouseBenchmark:
+    """ClickHouse performance benchmark results (TODO: Implement)"""
+    write_speed_rows_per_sec: float = 0.0
+    read_speed_rows_per_sec: float = 0.0
+    avg_write_latency_ms: float = 0.0
+    avg_read_latency_ms: float = 0.0
+    connection_latency_ms: float = 0.0
+    available: bool = False
+    error_message: Optional[str] = "ClickHouse benchmarking not implemented"
 
 
 @dataclass
@@ -88,10 +88,10 @@ class HardwareReportV2:
     baseline_rate: float
 
     # Enhanced benchmarks
-    mongodb_benchmark: MongoDBBenchmark
-    disk_io_benchmark: DiskIOBenchmark
-    network_benchmark: NetworkBenchmark
-    gpu_info: GPUInfo
+    clickhouse_benchmark: Optional[ClickHouseBenchmark] = None
+    disk_io_benchmark: Optional[DiskIOBenchmark] = None
+    network_benchmark: Optional[NetworkBenchmark] = None
+    gpu_info: Optional[GPUInfo] = None
 
     # Performance estimates
     estimated_samples_per_sec: float
@@ -111,15 +111,17 @@ class HardwareReportV2:
         print(f"  Platform: {self.platform}")
         print(f"  Performance Tier: {self.tier.upper()}")
 
-        print(f"\n💾 MONGODB PERFORMANCE")
-        if self.mongodb_benchmark.available:
-            print(f"  Write speed: {self.mongodb_benchmark.write_speed_docs_per_sec:.0f} docs/sec")
-            print(f"  Read speed: {self.mongodb_benchmark.read_speed_docs_per_sec:.0f} docs/sec")
-            print(f"  Write latency: {self.mongodb_benchmark.avg_write_latency_ms:.2f}ms")
-            print(f"  Read latency: {self.mongodb_benchmark.avg_read_latency_ms:.2f}ms")
-            print(f"  Connection latency: {self.mongodb_benchmark.connection_latency_ms:.2f}ms")
+        print(f"\n💾 CLICKHOUSE PERFORMANCE")
+        if self.clickhouse_benchmark and self.clickhouse_benchmark.available:
+            print(f"  Write speed: {self.clickhouse_benchmark.write_speed_rows_per_sec:.0f} rows/sec")
+            print(f"  Read speed: {self.clickhouse_benchmark.read_speed_rows_per_sec:.0f} rows/sec")
+            print(f"  Write latency: {self.clickhouse_benchmark.avg_write_latency_ms:.2f}ms")
+            print(f"  Read latency: {self.clickhouse_benchmark.avg_read_latency_ms:.2f}ms")
+            print(f"  Connection latency: {self.clickhouse_benchmark.connection_latency_ms:.2f}ms")
+        elif self.clickhouse_benchmark:
+            print(f"  ⚠️  ClickHouse not available: {self.clickhouse_benchmark.error_message}")
         else:
-            print(f"  ⚠️  MongoDB not available: {self.mongodb_benchmark.error_message}")
+            print(f"  ⚠️  ClickHouse benchmark not run")
 
         print(f"\n💿 DISK I/O PERFORMANCE")
         print(f"  Sequential write: {self.disk_io_benchmark.sequential_write_mbps:.1f} MB/s")
@@ -161,14 +163,14 @@ class HardwareReportV2:
             'platform': self.platform,
             'tier': self.tier,
             'baseline_rate': self.baseline_rate,
-            'mongodb_benchmark': {
-                'available': self.mongodb_benchmark.available,
-                'write_speed_docs_per_sec': self.mongodb_benchmark.write_speed_docs_per_sec,
-                'read_speed_docs_per_sec': self.mongodb_benchmark.read_speed_docs_per_sec,
-                'avg_write_latency_ms': self.mongodb_benchmark.avg_write_latency_ms,
-                'avg_read_latency_ms': self.mongodb_benchmark.avg_read_latency_ms,
-                'connection_latency_ms': self.mongodb_benchmark.connection_latency_ms,
-                'error_message': self.mongodb_benchmark.error_message
+            'clickhouse_benchmark': {
+                'available': self.clickhouse_benchmark.available if self.clickhouse_benchmark else False,
+                'write_speed_rows_per_sec': self.clickhouse_benchmark.write_speed_rows_per_sec if self.clickhouse_benchmark else 0,
+                'read_speed_rows_per_sec': self.clickhouse_benchmark.read_speed_rows_per_sec if self.clickhouse_benchmark else 0,
+                'avg_write_latency_ms': self.clickhouse_benchmark.avg_write_latency_ms if self.clickhouse_benchmark else 0,
+                'avg_read_latency_ms': self.clickhouse_benchmark.avg_read_latency_ms if self.clickhouse_benchmark else 0,
+                'connection_latency_ms': self.clickhouse_benchmark.connection_latency_ms if self.clickhouse_benchmark else 0,
+                'error_message': self.clickhouse_benchmark.error_message if self.clickhouse_benchmark else "Not run"
             },
             'disk_io_benchmark': {
                 'sequential_write_mbps': self.disk_io_benchmark.sequential_write_mbps,
@@ -226,7 +228,7 @@ class HardwareAnalyzerV2:
 
     def analyze_system(
         self,
-        mongodb_uri: str = "mongodb://localhost:27017/",
+        clickhouse_uri: str = "clickhouse://localhost:9000/",
         kato_url: str = "http://localhost:8000",
         training_config: Optional[Dict[str, Any]] = None,
         num_samples: int = 10000
@@ -235,7 +237,7 @@ class HardwareAnalyzerV2:
         Perform comprehensive system analysis.
 
         Args:
-            mongodb_uri: MongoDB connection URI for benchmarking
+            clickhouse_uri: ClickHouse connection URI for benchmarking (not yet implemented)
             kato_url: KATO API URL for latency testing
             training_config: Optional training config for accurate throughput estimates
             num_samples: Sample count for throughput estimation (default 10000)
@@ -259,10 +261,10 @@ class HardwareAnalyzerV2:
         if self.verbose:
             print(f"\n✓ System: {cpu_cores} cores, {memory_gb:.1f}GB RAM, tier={tier}")
 
-        # MongoDB benchmark
+        # ClickHouse benchmark (TODO: Implement)
         if self.verbose:
-            print(f"\n⏳ Benchmarking MongoDB...")
-        mongodb_bench = self._benchmark_mongodb(mongodb_uri)
+            print(f"\n⏳ ClickHouse benchmark not yet implemented, skipping...")
+        clickhouse_bench = None  # TODO: Implement _benchmark_clickhouse(clickhouse_uri)
 
         # Disk I/O benchmark
         if self.verbose:
@@ -302,9 +304,10 @@ class HardwareAnalyzerV2:
         estimated_tokens_per_sec = estimated_samples_per_sec * 500  # Assume avg 500 tokens/sample
 
         # Bottleneck prediction
+        clickhouse_write_speed = clickhouse_bench.write_speed_rows_per_sec if clickhouse_bench else 0
         bottleneck = self._predict_bottleneck(
             tier=tier,
-            mongodb_write_speed=mongodb_bench.write_speed_docs_per_sec,
+            storage_write_speed=clickhouse_write_speed,
             disk_write_speed=disk_bench.sequential_write_mbps,
             network_latency=network_bench.kato_api_latency_ms
         )
@@ -316,7 +319,7 @@ class HardwareAnalyzerV2:
             platform=platform_str,
             tier=tier,
             baseline_rate=baseline_rate,
-            mongodb_benchmark=mongodb_bench,
+            clickhouse_benchmark=clickhouse_bench,
             disk_io_benchmark=disk_bench,
             network_benchmark=network_bench,
             gpu_info=gpu_info,
@@ -330,87 +333,21 @@ class HardwareAnalyzerV2:
 
         return report
 
-    def _benchmark_mongodb(self, mongodb_uri: str) -> MongoDBBenchmark:
+    def _benchmark_clickhouse(self, clickhouse_uri: str) -> ClickHouseBenchmark:
         """
-        Benchmark MongoDB read/write performance.
+        Benchmark ClickHouse read/write performance.
 
-        Performs:
+        TODO: Implement ClickHouse benchmarking using clickhouse-connect library.
+        Should test:
         - Connection latency test
-        - Bulk write test (1000 documents)
-        - Read test (1000 documents)
-        - Cleanup test database
+        - Bulk insert test (1000 rows)
+        - Read test (1000 rows)
+        - Cleanup test table
 
         Returns:
-            MongoDBBenchmark with performance metrics
+            ClickHouseBenchmark with performance metrics (stub for now)
         """
-        try:
-            from pymongo import MongoClient
-            import random
-
-            # Connection test
-            conn_start = time.time()
-            client = MongoClient(mongodb_uri, serverSelectionTimeoutMS=5000)
-            client.server_info()  # Force connection
-            conn_latency_ms = (time.time() - conn_start) * 1000
-
-            # Use test database
-            db = client['hardware_benchmark_test']
-            collection = db['test_collection']
-
-            # Clear any existing data
-            collection.delete_many({})
-
-            # Write benchmark
-            num_docs = 1000
-            test_docs = [
-                {
-                    'name': f'PTRN|{random.randint(1000000, 9999999)}',
-                    'pattern_data': [[f'token{i}' for i in range(10)]],
-                    'frequency': random.randint(1, 100),
-                    'metadata': {'test': True}
-                }
-                for _ in range(num_docs)
-            ]
-
-            write_start = time.time()
-            result = collection.insert_many(test_docs)
-            write_duration = time.time() - write_start
-
-            write_speed = num_docs / write_duration
-            avg_write_latency = (write_duration / num_docs) * 1000
-
-            # Read benchmark
-            read_start = time.time()
-            docs = list(collection.find().limit(num_docs))
-            read_duration = time.time() - read_start
-
-            read_speed = len(docs) / read_duration
-            avg_read_latency = (read_duration / len(docs)) * 1000
-
-            # Cleanup
-            collection.delete_many({})
-            client.drop_database('hardware_benchmark_test')
-            client.close()
-
-            return MongoDBBenchmark(
-                write_speed_docs_per_sec=write_speed,
-                read_speed_docs_per_sec=read_speed,
-                avg_write_latency_ms=avg_write_latency,
-                avg_read_latency_ms=avg_read_latency,
-                connection_latency_ms=conn_latency_ms,
-                available=True
-            )
-
-        except Exception as e:
-            return MongoDBBenchmark(
-                write_speed_docs_per_sec=0,
-                read_speed_docs_per_sec=0,
-                avg_write_latency_ms=0,
-                avg_read_latency_ms=0,
-                connection_latency_ms=0,
-                available=False,
-                error_message=str(e)
-            )
+        return ClickHouseBenchmark()  # Returns default "not implemented" benchmark
 
     def _benchmark_disk_io(self, test_size_mb: int = 100) -> DiskIOBenchmark:
         """
@@ -598,7 +535,7 @@ class HardwareAnalyzerV2:
     def _predict_bottleneck(
         self,
         tier: str,
-        mongodb_write_speed: float,
+        storage_write_speed: float,
         disk_write_speed: float,
         network_latency: float
     ) -> str:
@@ -607,7 +544,7 @@ class HardwareAnalyzerV2:
 
         Args:
             tier: Hardware tier ('low', 'medium', 'high', 'server')
-            mongodb_write_speed: Docs/sec
+            storage_write_speed: Rows/sec for storage system (ClickHouse)
             disk_write_speed: MB/s
             network_latency: ms
 
@@ -628,8 +565,8 @@ class HardwareAnalyzerV2:
         elif tier == 'medium':
             scores['cpu'] = 0.4
 
-        # MongoDB/Disk: slow writes indicate bottleneck
-        if mongodb_write_speed < 500:
+        # Storage/Disk: slow writes indicate bottleneck
+        if storage_write_speed > 0 and storage_write_speed < 500:
             scores['disk'] = 0.7
         elif disk_write_speed < 50:
             scores['disk'] = 0.6

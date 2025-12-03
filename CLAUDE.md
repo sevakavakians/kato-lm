@@ -42,7 +42,7 @@ kato-notebooks/
    - node2: CHAPTER-level patterns (sequences of paragraph pattern names, ~3,375 tokens)
    - node3: BOOK-level patterns (sequences of chapter pattern names, ~50,625 tokens)
 5. **Streaming Data**: Large datasets (C4, RefinedWeb) via HuggingFace streaming
-6. **MongoDB Analysis**: Post-training pattern inspection and cleanup
+6. **ClickHouse/Redis Storage**: KATO now uses ClickHouse + Redis (MongoDB removed)
 
 ## CRITICAL: KATO Event Ordering Behavior
 
@@ -242,7 +242,7 @@ chunks = [
 **Common Tasks:**
 - Adding new datasets → `tools/streaming_dataset_loader.py`
 - Modifying training logic → `tools/hierarchical_learning.py`
-- Analysis utilities → `MongoDBAnalyzer` class
+- Analysis utilities → `tools/kato_storage/` (ClickHouse/Redis)
 - Jupyter experiments → `hierarchical_training.ipynb`
 
 **Important Constraints:**
@@ -255,8 +255,8 @@ chunks = [
 
 This project requires:
 - **KATO Server**: http://localhost:8000 (must be running)
-- **MongoDB**: mongodb://localhost:27017 (for pattern storage)
-- **Python packages**: datasets, transformers, pymongo, matplotlib, tqdm
+- **ClickHouse + Redis**: KATO's storage backend (replaces MongoDB)
+- **Python packages**: datasets, transformers, clickhouse-connect, redis, matplotlib, tqdm
 
 ### Related Projects
 

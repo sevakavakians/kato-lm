@@ -7,12 +7,12 @@ This directory contains portable copies of KATO storage utilities for use in Jup
 For these utilities to work, your Jupyter environment needs the following packages:
 
 ```bash
-pip install clickhouse-connect redis pymongo datasketch
+pip install clickhouse-connect redis datasketch
 ```
 
 Or in a Jupyter notebook cell:
 ```python
-!pip install clickhouse-connect redis pymongo datasketch
+!pip install clickhouse-connect redis datasketch
 ```
 
 ## Files

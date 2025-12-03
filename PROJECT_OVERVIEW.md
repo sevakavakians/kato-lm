@@ -66,13 +66,11 @@ These names:
 - Carry emotives and metadata (optional contextual information)
 - Become first-class symbols for higher levels
 
-### 4. MongoDB-Based Analysis and Cleanup
+### 4. Pattern Storage and Analysis
 
-After training, patterns are stored in MongoDB with frequency counts. The system provides:
-- **Frequency analysis**: Histogram of pattern frequencies per node
-- **Cleanup utilities**: Remove low-frequency patterns (noise reduction)
-- **Visualization**: Matplotlib-based frequency distribution plots
-- **Statistics**: Total patterns, average frequency, distribution ranges
+Patterns are stored in KATO's ClickHouse + Redis backend with frequency counts.
+
+**Note:** Post-training pattern analysis tools are currently being migrated from MongoDB to ClickHouse. Analysis utilities (frequency histograms, cleanup, visualization) will be available once the migration is complete. See `tools/kato_storage/` for the new implementation.
 
 ### 5. Arbitrary Node Depth
 
@@ -511,7 +509,7 @@ if should_attach:
 3. **Define helper functions** showing explicit KATO calls
 4. **Process samples** one-by-one (educational mode)
 5. **Batch training** with progress tracking
-6. **Analyze patterns** using MongoDB
+6. **Analyze patterns** (tools in development for ClickHouse)
 
 **Key files:**
 - `training_v2.ipynb` - New educational training notebook
@@ -564,12 +562,6 @@ kato-notebooks/
 - Creates book/chapter/paragraph/chunk boundaries
 - Uses fixed-length token chunking (configurable)
 - Handles metadata propagation
-
-**`MongoDBAnalyzer`**
-- Direct MongoDB access for pattern analysis
-- Frequency histograms and statistics
-- Pattern deletion by threshold
-- Visualization tools
 
 **`StreamingDatasetLoader`**
 - Streams large datasets from HuggingFace Hub
@@ -635,7 +627,7 @@ The main training orchestrator that:
    - Hardware analysis and time estimation
    - Dataset recommendations based on available time
    - Built-in demo for quick validation
-   - MongoDB utilities for pattern inspection
+   - Pattern analysis utilities (in development for ClickHouse)
 
 3. **Enable Future Extensions**
    - Prediction-based transfer (use predictions from one level to inform next)
@@ -690,7 +682,7 @@ node3: observe(chapter_pattern) ... learn() → book_pattern
 5. **Frequency Update**: If pattern seen before, frequency increments
 6. **STM Clear**: Memory cleared for next unit
 
-**Pattern Structure in MongoDB:**
+**Pattern Structure in KATO Storage:**
 ```json
 {
     "name": "PTRN|7f3a2b1c...",
@@ -701,6 +693,7 @@ node3: observe(chapter_pattern) ... learn() → book_pattern
     "length": 5
 }
 ```
+*(Stored in ClickHouse + Redis)*
 
 ### Performance Optimizations
 
@@ -742,7 +735,7 @@ stats = train_from_streaming_dataset_parallel(
 **How it works:**
 - Each worker has its own KATOClient instances (one per node)
 - Thread-local storage reuses learner/segmenter per thread
-- Workers share MongoDB via KATO API (no lock contention)
+- Workers share KATO storage via KATO API (no lock contention)
 - **Connection safety**: `workers × nodes ≤ 30` enforced to prevent pool exhaustion
 - Typical speedup: 2-3x faster with 75% parallel efficiency
 
@@ -767,9 +760,9 @@ stats = train_from_streaming_dataset_parallel(
 - Configuration validation prevents resuming with mismatched settings
 - Validates: num_nodes, chunk_sizes, tokenizer_name, node_ids, segmentation_mode
 - Clear error messages if configuration changed
-- Learned patterns persist in MongoDB (not lost on crash)
+- Learned patterns persist in KATO storage (not lost on crash)
 
-**Why config validation matters:** Different configurations create different MongoDB databases. Resuming with wrong config would mix incompatible patterns.
+**Why config validation matters:** Different configurations create different storage schemas. Resuming with wrong config would mix incompatible patterns.
 
 #### 4. Connection Pool Management
 
@@ -788,7 +781,7 @@ if connections_needed > 30:
 - Example: 6 workers × 5 nodes = 30 connections ⚠️ AT LIMIT
 - Example: 8 workers × 5 nodes = 40 connections ❌ UNSAFE
 
-**Why 30?** MongoDB default connection pool size with safety margin for other processes.
+**Why 30?** Safe default for concurrent KATO API connections with safety margin for other processes.
 
 #### 5. Session Auto-Recovery
 
@@ -841,7 +834,7 @@ Estimated Time: 37.8 minutes
 #### 1. Hierarchical Pattern Learning ✅
 - Train on large-scale datasets (WikiText, C4, RefinedWeb, etc.) via streaming
 - Learn patterns at multiple abstraction levels (chunks → paragraphs → chapters → documents)
-- Store patterns in MongoDB with frequency statistics
+- Store patterns in KATO storage (ClickHouse + Redis) with frequency statistics
 - Single-pass training with real-time pattern name propagation
 - Parallel worker processing with 10-15x combined speedup
 - Checkpoint/resume for long training sessions
@@ -996,8 +989,8 @@ Using `pred['name']` → API lookup → full sequence → overlap with `pred['fu
    - Not every N tokens or N patterns
    - **Rationale**: Respects natural linguistic/document structure
 
-3. **MongoDB for Pattern Storage (Not In-Memory)**
-   - Patterns persist in MongoDB with frequency counters
+3. **Persistent Pattern Storage (Not In-Memory)**
+   - Patterns persist in KATO storage (ClickHouse + Redis) with frequency counters
    - Allows post-training analysis and cleanup
    - **Rationale**: Scalability and inspection capabilities
 
@@ -1055,7 +1048,7 @@ Using `pred['name']` → API lookup → full sequence → overlap with `pred['fu
    - Decode pattern names back to original content
    - Build pattern vocabulary
 
-   **Status:** Pattern data stored in MongoDB; decoding utilities not yet implemented.
+   **Status:** Pattern data stored in KATO storage; decoding utilities not yet implemented.
 
 ### Long-Term Research Directions
 
@@ -1130,19 +1123,19 @@ stats = train_hierarchical_single_pass(corpus, learner, num_levels=4)
 
 ### Analysis and Cleanup
 
+**Note:** Pattern analysis tools are being migrated to ClickHouse. The following functionality is planned:
+
 ```python
-from tools import MongoDBAnalyzer, analyze_all_nodes, cleanup_all_nodes
-
-# Analyze patterns
-all_stats = analyze_all_nodes(learner)
-print(f"node0 patterns: {all_stats['node0']['total_patterns']}")
-
-# Cleanup noise
-deleted = cleanup_all_nodes(learner, threshold=2, verbose=True)
-
-# Visualize
-analyzer = MongoDBAnalyzer(learner.nodes['node0'])
-analyzer.visualize_frequency_distribution(max_freq=50)
+# Planned API (not yet implemented):
+# from tools.kato_storage import ClickHouseAnalyzer
+#
+# # Analyze patterns
+# analyzer = ClickHouseAnalyzer(learner.nodes['node0'])
+# stats = analyzer.get_stats()
+# print(f"node0 patterns: {stats['total_patterns']}")
+#
+# # Visualize
+# analyzer.visualize_frequency_distribution(max_freq=50)
 ```
 
 ## Success Metrics
@@ -1173,7 +1166,7 @@ analyzer.visualize_frequency_distribution(max_freq=50)
 5. **Training Completes Successfully**
    - No errors or crashes
    - Statistics match expectations (node0 > node1 > node2 > node3)
-   - MongoDB contains patterns at all levels
+   - KATO storage contains patterns at all levels
 
 ## Dependencies
 
@@ -1181,10 +1174,9 @@ analyzer.visualize_frequency_distribution(max_freq=50)
 
 - **Python 3.8+**
 - **KATO Server** (FastAPI service running on http://localhost:8000)
-- **MongoDB** (for pattern storage, typically mongodb://localhost:27017)
+- **ClickHouse + Redis** (KATO's storage backend)
 - **HuggingFace Transformers** (tokenizers: GPT-2, BERT, RoBERTa, etc.)
 - **HuggingFace Datasets** (streaming large datasets)
-- **PyMongo** (MongoDB Python client)
 - **matplotlib** (visualization)
 - **tqdm** (progress bars)
 - **numpy** (numerical operations)
@@ -1192,7 +1184,7 @@ analyzer.visualize_frequency_distribution(max_freq=50)
 ### Installation
 
 ```bash
-pip install datasets transformers pymongo matplotlib tqdm numpy
+pip install datasets transformers clickhouse-connect redis matplotlib tqdm numpy
 ```
 
 ### KATO Server

@@ -47,7 +47,7 @@ This project has been streamlined for clarity:
    - Bottom-up activation (input → predictions)
    - Top-down unraveling (patterns → tokens)
    - Explicit KATO API calls (educational)
-   - MongoDB pattern retrieval
+   - Pattern retrieval from KATO storage
    - ⚠️ **Critical:** Uses `pred['present']` (not `pred['name']`) to avoid token repetition
 
 4. **`analysis.ipynb`** - Analyze learned patterns
@@ -78,7 +78,7 @@ This project has been streamlined for clarity:
 - `training_estimator.py` - Data-driven time predictions from 29 historical runs
 - `profiling_engine.py` - Real-time CPU/memory/disk profiling during training
 - `hardware_analyzer_v2.py` - Hardware detection and benchmarking
-- `storage_estimator.py` - MongoDB storage estimation with Zipfian modeling
+- `storage_estimator.py` - Storage estimation with Zipfian modeling
 - `scaling_analyzer.py` - Scaling analysis
 - `hardware_recommender.py` - Hardware recommendations
 
@@ -155,7 +155,7 @@ Each level learns a **complete pattern** before passing its symbolic representat
 🚀 **Streaming Support** - Process large corpora efficiently
 💾 **Session-Independent Analysis** - Analyze trained models without active sessions
 🔬 **Training Run Comparison** - Compare multiple experiments side-by-side
-🗄️ **MongoDB Persistence** - Training data persists across kernel restarts
+🗄️ **Persistent Storage** - Training data persists in KATO storage across kernel restarts
 
 ## What is Hierarchical Concept Learning?
 
@@ -465,64 +465,33 @@ python kato_hierarchical_streaming.py
 
 **Analyze trained models without active training sessions!**
 
-Training data persists in MongoDB, allowing you to analyze patterns after kernel restarts, fix analysis bugs without retraining, and work across different notebooks.
+Training data persists in KATO storage (ClickHouse + Redis), allowing you to analyze patterns after kernel restarts, fix analysis bugs without retraining, and work across different notebooks.
 
-### Quick Example: Load and Analyze
+### Pattern Analysis Tools
 
-```python
-from tools import (
-    StandaloneMongoDBAnalyzer,
-    TrainingManifest,
-    load_latest_manifest
-)
-
-# Method 1: Load from training manifest (auto-saved after training)
-manifest = load_latest_manifest()
-print(f"Training: {manifest.training_id}")
-print(f"Dataset: {manifest.dataset}, Samples: {manifest.samples_trained:,}")
-
-# Get analyzers for all nodes (NO active sessions needed!)
-analyzers = manifest.get_analyzers(mongo_uri="mongodb://localhost:27017/")
-
-# Analyze patterns
-for node_name, analyzer in analyzers.items():
-    stats = analyzer.get_stats()
-    print(f"{node_name}: {stats['total_patterns']:,} patterns")
-
-# Visualize frequency distributions
-analyzers['node0'].visualize_frequency_distribution()
-```
-
-### Method 2: Direct Database Access
+**Note:** Pattern analysis tools are currently being migrated from MongoDB to ClickHouse. The following functionality will be available once the migration is complete:
 
 ```python
-from tools import discover_training_databases, StandaloneMongoDBAnalyzer
-
-# Discover all KATO databases
-databases = discover_training_databases(mongo_uri="mongodb://localhost:27017/")
-print(f"Found {len(databases)} databases: {databases}")
-
-# Create analyzer for specific database
-analyzer = StandaloneMongoDBAnalyzer(
-    db_name="node0_level0_kato",
-    mongo_uri="mongodb://localhost:27017/"
-)
-
-# Get statistics
-stats = analyzer.get_stats()
-print(f"Total patterns: {stats['total_patterns']:,}")
-print(f"Average frequency: {stats['avg_frequency']:.2f}")
-
-# Get high-frequency patterns
-high_freq = analyzer.get_patterns_by_frequency(min_freq=10)
-print(f"Patterns with frequency >= 10: {len(high_freq)}")
+# Planned API (in development):
+# from tools.kato_storage import ClickHouseAnalyzer
+# from tools import TrainingManifest, load_latest_manifest
+#
+# # Load training manifest (auto-saved after training)
+# manifest = load_latest_manifest()
+# print(f"Training: {manifest.training_id}")
+# print(f"Dataset: {manifest.dataset}, Samples: {manifest.samples_trained:,}")
+#
+# # Get analyzers for all nodes
+# # analyzer = ClickHouseAnalyzer(node_id="node0")
+# # stats = analyzer.get_stats()
+# # print(f"Total patterns: {stats['total_patterns']:,}")
 ```
 
 ### Complete Workflow Example
 
-See [`analysis.ipynb`](analysis.ipynb) for a complete session-independent analysis workflow.
+See [`analysis.ipynb`](analysis.ipynb) for analysis workflows (temporarily unavailable during storage migration).
 
-**Benefits:**
+**Benefits (once reimplemented):**
 - ✅ Analyze after kernel restarts
 - ✅ Debug analysis code without retraining
 - ✅ Work with historical training data
@@ -570,36 +539,32 @@ train_from_streaming_dataset_parallel(
 
 ### Compare Training Runs
 
+**Note:** Training run comparison tools are being migrated to ClickHouse. Comparison functionality will be available once the migration is complete.
+
 ```python
-from tools import list_all_training_runs, StandaloneMongoDBAnalyzer
-
-# List all available training runs
-runs = list_all_training_runs(mongo_uri="mongodb://localhost:27017/")
-print(f"Available runs: {list(runs.keys())}")
-
-# Compare two runs
-for run_id in ['wikitext_100samples', 'wikitext_500samples']:
-    print(f"\n{run_id}:")
-    for db_name in runs[run_id]:
-        analyzer = StandaloneMongoDBAnalyzer(
-            db_name=db_name,
-            mongo_uri="mongodb://localhost:27017/"
-        )
-        stats = analyzer.get_stats()
-        print(f"  {db_name}: {stats['total_patterns']:,} patterns")
-        analyzer.close()
+# Planned API (in development):
+# from tools.kato_storage import ClickHouseAnalyzer
+#
+# # List all available training runs
+# # runs = list_all_training_runs(clickhouse_uri="clickhouse://localhost:9000/")
+# # print(f"Available runs: {list(runs.keys())}")
+#
+# # Compare two runs
+# # for run_id in ['wikitext_100samples', 'wikitext_500samples']:
+# #     print(f"\n{run_id}:")
+# #     analyzer = ClickHouseAnalyzer(run_id=run_id)
+# #     stats = analyzer.get_stats()
+# #     print(f"  {run_id}: {stats['total_patterns']:,} patterns")
 ```
 
 ### Manage Training Runs
 
 ```python
-from tools import delete_training_run
-
-# Delete old experiments
-delete_training_run('old_experiment')  # Prompts for confirmation
-
-# Delete without confirmation (use carefully!)
-delete_training_run('old_experiment', confirm=False)
+# Training run management API (in development):
+# from tools.kato_storage import delete_training_run
+#
+# # Delete old experiments
+# # delete_training_run('old_experiment')
 ```
 
 ### Common Comparison Scenarios
@@ -1106,77 +1071,29 @@ Print formatted learning summary.
 
 ---
 
-### StandaloneMongoDBAnalyzer
+### Pattern Analysis API (In Development)
 
-Session-independent MongoDB analyzer for post-training analysis.
+**Note:** Pattern analysis tools are being migrated from MongoDB to ClickHouse. The following API is planned:
 
 ```python
-class StandaloneMongoDBAnalyzer:
-    def __init__(
-        self,
-        db_name: str,
-        mongo_uri: str = "mongodb://localhost:27017/",
-        timeout_ms: int = 30000
-    )
+# Planned ClickHouseAnalyzer API (in development):
+# class ClickHouseAnalyzer:
+#     def __init__(
+#         self,
+#         node_id: str,
+#         clickhouse_uri: str = "clickhouse://localhost:9000/",
+#         timeout_ms: int = 30000
+#     )
 ```
 
-**Parameters:**
-- `db_name` (str): MongoDB database name (e.g., "node0_level0_kato")
-- `mongo_uri` (str): MongoDB connection URI
-- `timeout_ms` (int): Connection timeout in milliseconds
+**Planned Methods:**
+- `get_stats() -> dict` - Get pattern statistics
+- `get_frequency_histogram() -> dict` - Get frequency distribution
+- `get_patterns_by_frequency(min_freq, max_freq) -> list` - Query patterns
+- `visualize_frequency_distribution(max_freq, use_log_scale)` - Matplotlib visualization
+- `delete_patterns_below_threshold(threshold) -> int` - Cleanup low-frequency patterns
 
-**Methods:**
-
-#### `get_stats() -> dict`
-
-Get database statistics.
-
-**Returns:**
-- `dict`: Statistics with keys:
-  - `total_patterns` (int): Total pattern count
-  - `avg_frequency` (float): Average pattern frequency
-  - `max_frequency` (int): Maximum pattern frequency
-  - `min_frequency` (int): Minimum pattern frequency
-
-#### `get_frequency_histogram() -> dict`
-
-Get pattern frequency distribution.
-
-**Returns:**
-- `dict`: Mapping of frequency → count (e.g., `{1: 120000, 2: 1500, 3: 200}`)
-
-#### `get_patterns_by_frequency(min_freq: int = 1, max_freq: int = None) -> list`
-
-Get patterns within frequency range.
-
-**Parameters:**
-- `min_freq` (int): Minimum frequency (inclusive)
-- `max_freq` (int): Maximum frequency (inclusive), None for no limit
-
-**Returns:**
-- `list`: List of pattern dicts with keys: `name`, `frequency`, `length`
-
-#### `visualize_frequency_distribution(max_freq: int = None, use_log_scale: bool = True)`
-
-Visualize pattern frequency distribution.
-
-**Parameters:**
-- `max_freq` (int): Maximum frequency to show (None = show all)
-- `use_log_scale` (bool): Use logarithmic y-axis
-
-#### `delete_patterns_below_threshold(threshold: int) -> int`
-
-Delete low-frequency patterns (noise cleanup).
-
-**Parameters:**
-- `threshold` (int): Delete patterns with frequency < threshold
-
-**Returns:**
-- `int`: Number of patterns deleted
-
-#### `close()`
-
-Close MongoDB connection.
+For implementation progress, see `tools/kato_storage/`.
 
 ---
 
@@ -1231,31 +1148,17 @@ Save manifest to JSON file.
 **Parameters:**
 - `filepath` (str): Destination file path
 
-#### `get_analyzers(mongo_uri: str = "mongodb://localhost:27017/", timeout_ms: int = 2000) -> dict`
+#### `get_analyzers()` - **Temporarily Unavailable**
 
-Create StandaloneMongoDBAnalyzer instances for all nodes.
-
-**Parameters:**
-- `mongo_uri` (str): MongoDB connection URI
-- `timeout_ms` (int): Connection timeout
-
-**Returns:**
-- `dict`: Mapping of node_name → StandaloneMongoDBAnalyzer
+**Note:** This method is being reimplemented for ClickHouse. Previously created analyzers for all nodes.
 
 ---
 
 ### Helper Functions
 
-#### `discover_training_databases(mongo_uri: str = "mongodb://localhost:27017/", timeout_ms: int = 2000) -> list`
+#### `discover_training_databases()` - **Removed**
 
-Discover all KATO databases in MongoDB.
-
-**Parameters:**
-- `mongo_uri` (str): MongoDB connection URI
-- `timeout_ms` (int): Connection timeout
-
-**Returns:**
-- `list`: Sorted list of database names ending with "_kato"
+**Note:** This function has been removed. KATO now uses ClickHouse + Redis storage instead of MongoDB. Training run discovery will be reimplemented for the new storage system.
 
 #### `list_available_manifests(manifests_dir: str = 'manifests') -> list`
 
@@ -1300,44 +1203,13 @@ nodes = create_training_run_nodes(run_id='wikitext_100k')
 learner = HierarchicalConceptLearner(nodes=nodes, tokenizer_name='gpt2')
 ```
 
-#### `list_all_training_runs(mongo_uri: str = "mongodb://localhost:27017/", timeout_ms: int = 2000) -> dict`
+#### `list_all_training_runs()` - **Removed**
 
-Group discovered databases by training run ID.
+**Note:** This function has been removed. Will be reimplemented for ClickHouse storage.
 
-**Parameters:**
-- `mongo_uri` (str): MongoDB connection URI
-- `timeout_ms` (int): Connection timeout
+#### `delete_training_run()` - **Removed**
 
-**Returns:**
-- `dict`: Mapping of run_id → list of database names
-
-**Example:**
-```python
-runs = list_all_training_runs()
-# Returns: {
-#   'wikitext_100k': ['node0_wikitext_100k_kato', 'node1_wikitext_100k_kato', ...],
-#   'c4_50k': ['node0_c4_50k_kato', 'node1_c4_50k_kato', ...]
-# }
-```
-
-#### `delete_training_run(run_id: str, mongo_uri: str = "mongodb://localhost:27017/", confirm: bool = True, timeout_ms: int = 2000)`
-
-Delete all databases for a specific training run.
-
-**Parameters:**
-- `run_id` (str): Training run identifier
-- `mongo_uri` (str): MongoDB connection URI
-- `confirm` (bool): Prompt for confirmation before deletion
-- `timeout_ms` (int): Connection timeout
-
-**Example:**
-```python
-# Delete with confirmation prompt
-delete_training_run('old_experiment')
-
-# Delete without confirmation (use carefully!)
-delete_training_run('old_experiment', confirm=False)
-```
+**Note:** This function has been removed. Training run management will be reimplemented for ClickHouse storage.
 
 ## Examples
 
@@ -1562,64 +1434,35 @@ for book in books:
 
 ### Example 7: Session-Independent Analysis Workflow
 
+**Note:** Session-independent analysis is temporarily unavailable during the MongoDB → ClickHouse migration. The following workflow will be available once reimplemented:
+
 ```python
-from tools import (
-    StandaloneMongoDBAnalyzer,
-    load_latest_manifest,
-    discover_training_databases
-)
-
-# Method 1: Load from auto-saved manifest
-print("Loading latest training manifest...")
-manifest = load_latest_manifest()
-
-print(f"\nTraining Info:")
-print(f"  ID: {manifest.training_id}")
-print(f"  Dataset: {manifest.dataset}")
-print(f"  Samples: {manifest.samples_trained:,}")
-print(f"  Timestamp: {manifest.timestamp}")
-
-# Get analyzers for all nodes
-analyzers = manifest.get_analyzers(mongo_uri="mongodb://localhost:27017/")
-
-# Analyze patterns at each level
-print(f"\nPattern Statistics:")
-for node_name, analyzer in analyzers.items():
-    stats = analyzer.get_stats()
-    print(f"{node_name}:")
-    print(f"  Total patterns: {stats['total_patterns']:,}")
-    print(f"  Avg frequency: {stats['avg_frequency']:.2f}")
-    print(f"  Max frequency: {stats['max_frequency']:,}")
-
-# Get high-frequency patterns from node0
-high_freq = analyzers['node0'].get_patterns_by_frequency(min_freq=10)
-print(f"\nHigh-frequency patterns (freq >= 10): {len(high_freq)}")
-
-# Visualize frequency distribution
-print("\nGenerating frequency distribution charts...")
-for node_name in ['node0', 'node1', 'node2', 'node3']:
-    analyzers[node_name].visualize_frequency_distribution(
-        max_freq=None,  # Show all frequencies
-        use_log_scale=True
-    )
-
-# Clean up connections
-for analyzer in analyzers.values():
-    analyzer.close()
-
-print("\n✓ Analysis complete!")
+# Planned workflow (in development):
+# from tools.kato_storage import ClickHouseAnalyzer
+# from tools import load_latest_manifest
+#
+# # Load from auto-saved manifest
+# print("Loading latest training manifest...")
+# manifest = load_latest_manifest()
+#
+# print(f"\nTraining Info:")
+# print(f"  ID: {manifest.training_id}")
+# print(f"  Dataset: {manifest.dataset}")
+# print(f"  Samples: {manifest.samples_trained:,}")
+# print(f"  Timestamp: {manifest.timestamp}")
+#
+# # Get analyzers for all nodes (API in development)
+# # Analysis code will go here once reimplemented
 ```
 
 ### Example 8: Comparing Training Runs
 
+**Note:** Training run comparison is temporarily unavailable during the storage migration.
+
 ```python
-from tools import (
-    create_training_run_nodes,
-    HierarchicalConceptLearner,
-    list_all_training_runs,
-    StandaloneMongoDBAnalyzer,
-    train_from_streaming_dataset_parallel
-)
+# Planned API (in development):
+# from tools import create_training_run_nodes, HierarchicalConceptLearner
+# from tools import train_from_streaming_dataset_parallel
 
 # Experiment 1: Small dataset
 print("Training Run 1: 100 samples...")
@@ -1646,74 +1489,24 @@ train_from_streaming_dataset_parallel(
 )
 
 # Compare the results
-print("\n" + "="*80)
-print("COMPARING TRAINING RUNS")
-print("="*80 + "\n")
-
-runs = list_all_training_runs(mongo_uri="mongodb://localhost:27017/")
-
-for run_id in ['experiment_100samples', 'experiment_1000samples']:
-    print(f"\nRun: {run_id}")
-    print("-" * 60)
-
-    # Analyze each node
-    for db_name in sorted(runs[run_id]):
-        analyzer = StandaloneMongoDBAnalyzer(
-            db_name=db_name,
-            mongo_uri="mongodb://localhost:27017/",
-            timeout_ms=2000
-        )
-
-        stats = analyzer.get_stats()
-        node_name = db_name.split('_')[0]
-
-        print(f"  {node_name}: {stats['total_patterns']:,} patterns "
-              f"(avg freq: {stats['avg_frequency']:.2f})")
-
-        analyzer.close()
-
-print("\n✓ Comparison complete!")
+# print("\n" + "="*80)
+# print("COMPARING TRAINING RUNS")
+# print("="*80 + "\n")
+#
+# # Comparison code will be reimplemented for ClickHouse storage
+#
+# print("\n✓ Comparison complete!")
 ```
 
 ### Example 9: Pattern Cleanup and Re-analysis
 
+**Note:** Pattern cleanup functionality is temporarily unavailable during the storage migration.
+
 ```python
-from tools import StandaloneMongoDBAnalyzer
-
-# Analyze patterns before cleanup
-analyzer = StandaloneMongoDBAnalyzer(
-    db_name="node0_level0_kato",
-    mongo_uri="mongodb://localhost:27017/"
-)
-
-print("Before cleanup:")
-stats_before = analyzer.get_stats()
-print(f"  Total patterns: {stats_before['total_patterns']:,}")
-print(f"  Average frequency: {stats_before['avg_frequency']:.2f}")
-
-# Get frequency histogram
-histogram = analyzer.get_frequency_histogram()
-low_freq_count = histogram.get(1, 0)
-print(f"  Patterns with frequency = 1: {low_freq_count:,}")
-
-# Delete low-frequency patterns (noise)
-threshold = 2
-print(f"\nDeleting patterns with frequency < {threshold}...")
-deleted = analyzer.delete_patterns_below_threshold(threshold)
-print(f"  Deleted: {deleted:,} patterns")
-
-# Re-analyze
-print("\nAfter cleanup:")
-stats_after = analyzer.get_stats()
-print(f"  Total patterns: {stats_after['total_patterns']:,}")
-print(f"  Average frequency: {stats_after['avg_frequency']:.2f}")
-
-# Visualize improvement
-print("\nGenerating comparison visualization...")
-analyzer.visualize_frequency_distribution(max_freq=None, use_log_scale=True)
-
-analyzer.close()
-print("\n✓ Cleanup complete!")
+# Planned API (in development):
+# from tools.kato_storage import ClickHouseAnalyzer
+#
+# # Pattern cleanup will be reimplemented for ClickHouse
 ```
 
 ## Configuration
@@ -2177,7 +1970,7 @@ df.to_csv('learning_stats.csv', index=False)
 
 - **Pattern**: Learned structure identified by `PTRN|<hash>`
 - **STM (Short-Term Memory)**: Temporary storage for observations
-- **LTM (Long-Term Memory)**: Persistent pattern storage (MongoDB)
+- **LTM (Long-Term Memory)**: Persistent pattern storage (ClickHouse + Redis)
 - **Prediction Object**: Output from pattern matching with temporal segmentation
 - **max_pattern_length**: Controls auto-learning behavior
 - **stm_mode**: Controls STM behavior (ROLLING vs CLEAR)
