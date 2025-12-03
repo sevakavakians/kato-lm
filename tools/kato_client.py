@@ -6,9 +6,13 @@ Sessions are handled automatically - one client instance equals one isolated KAT
 
 Features:
 - Automatic session creation and cleanup
+- Session-based configuration updates (v3.3.0+)
 - Automatic session recreation on 404 errors (expired/lost sessions)
 - STM state recovery after session recreation
 - Exponential backoff retry for transient failures
+- **NEW (v3.6.0)**: Automatic connection retry for service restarts
+- **NEW (v3.6.0)**: Health check verification before retry
+- **NEW (v3.6.0)**: Transparent handling of uvicorn request limit restarts
 
 USAGE:
     from sample_kato_client import KATOClient
@@ -26,6 +30,12 @@ USAGE:
     client.learn()
     predictions = client.get_predictions()
 
+    # Update configuration dynamically (v3.3.0+)
+    client.update_session_config({
+        'recall_threshold': 0.1,
+        'max_predictions': 100
+    })
+
     # Cleanup
     client.close()
 
@@ -34,8 +44,19 @@ USAGE:
         client.observe(strings=["hello", "world"])
         predictions = client.get_predictions()
 
+RESILIENCE (v3.6.0+):
+    The client automatically handles KATO service restarts:
+
+    - Service restart (uvicorn --limit-max-requests): Detected via ConnectionError
+    - Health check wait: Up to 30 seconds for service to become healthy
+    - Session recreation: Creates new session with same configuration
+    - Transparent retry: Failed request automatically retried (up to 3 attempts)
+
+    This means long-running training workloads (1000s of samples) will continue
+    seamlessly even when KATO restarts every ~10,000 requests.
+
 Author: KATO Team
-Version: 3.2.0 - Optimized timeout defaults for long-running training workloads
+Version: 3.6.0 - Added automatic connection retry and health check verification for service restarts
 """
 
 import json
@@ -57,6 +78,7 @@ class KATOClient:
 
     Features:
         - Automatic session creation and cleanup
+        - Session-based configuration updates (v3.3.0+)
         - Automatic session recreation on 404 errors (expired/lost sessions)
         - STM state recovery after session recreation
         - Exponential backoff retry for transient failures
@@ -95,6 +117,32 @@ class KATOClient:
         max_session_recreate_attempts: int (default=3)
             - Maximum attempts to recreate session before failing
             - Uses exponential backoff: 0.5s, 1s, 2s
+
+    Node Isolation (v3.4.0+):
+        **BREAKING CHANGE**: Optional node_id parameters removed from all methods.
+        One client instance = one node, always. To access multiple nodes, create
+        multiple client instances.
+
+        ✅ CORRECT:
+            node0 = KATOClient(node_id="node0")
+            node1 = KATOClient(node_id="node1")
+            node0.get_gene("recall_threshold")  # Always uses node0
+            node1.get_gene("recall_threshold")  # Always uses node1
+
+        ❌ REMOVED (no longer supported):
+            client.get_gene("recall_threshold", node_id="other_node")
+
+    Configuration Updates (v3.3.0+):
+        **IMPORTANT**: Use update_session_config() for runtime configuration changes.
+
+        ✅ CORRECT:
+            client.update_session_config({'recall_threshold': 0.1})
+
+        ❌ DEPRECATED:
+            client.update_genes({'recall_threshold': 0.1})  # Won't affect your session!
+
+        The update_genes() method only updates processor defaults and does NOT
+        affect active sessions. It's deprecated in KATO v2.1.0+.
 
     Resilience:
         The client is designed for long-running tasks and handles:
@@ -219,10 +267,11 @@ class KATOClient:
             config['indexer_type'] = indexer_type
         if max_predictions != 100:
             config['max_predictions'] = max_predictions
-        if sort_symbols is not True:
-            config['sort_symbols'] = sort_symbols
-        if process_predictions is not True:
-            config['process_predictions'] = process_predictions
+
+        # Always include boolean flags to ensure they're explicitly set
+        # (don't rely on server defaults which may differ from client assumptions)
+        config['sort_symbols'] = sort_symbols
+        config['process_predictions'] = process_predictions
 
         # Store config for session recreation
         self._session_config = config
@@ -256,6 +305,29 @@ class KATOClient:
                 timeout=self.timeout
             )
             response.raise_for_status()
+
+    def _wait_for_kato_healthy(self, max_wait: int = 30, check_interval: float = 2) -> bool:
+        """
+        Wait for KATO service to become healthy after restart.
+
+        Args:
+            max_wait: Maximum seconds to wait for service (default: 30)
+            check_interval: Seconds between health checks (default: 2)
+
+        Returns:
+            True if service becomes healthy, False if timeout
+        """
+        start_time = time.time()
+        while time.time() - start_time < max_wait:
+            try:
+                url = urljoin(self.base_url, '/health')
+                response = self._http_session.get(url, timeout=5)
+                if response.status_code == 200:
+                    return True
+            except Exception:
+                pass
+            time.sleep(check_interval)
+        return False
 
     def _recreate_session_with_state_recovery(self) -> None:
         """
@@ -300,14 +372,24 @@ class KATOClient:
         **kwargs
     ) -> Dict[str, Any]:
         """
-        Internal method to make HTTP requests with automatic session recreation.
+        Internal method to make HTTP requests with automatic session recreation and connection retry.
 
-        This method implements retry logic with session recreation on 404 errors.
-        If a session expires or is lost, it will:
-        1. Attempt to cache current STM state
-        2. Recreate the session
-        3. Restore STM state if possible
-        4. Retry the original request
+        This method implements retry logic for:
+        1. Session recreation on 404 errors (expired sessions)
+        2. Connection failures (service restarts, network issues)
+        3. Automatic health check verification before retry
+
+        Connection Failure Handling:
+        - Detects ConnectionError (service restart, network down)
+        - Waits for service to become healthy (up to 30s)
+        - Retries with exponential backoff
+        - Recreates session if needed
+
+        Session Recreation:
+        - Triggered on 404 errors (session not found)
+        - Attempts to cache and restore STM state
+        - Creates new session automatically
+        - Retries original request
 
         Args:
             method: HTTP method (GET, POST, DELETE, etc.)
@@ -321,6 +403,7 @@ class KATOClient:
 
         Raises:
             requests.HTTPError: On HTTP error responses after all retry attempts
+            requests.ConnectionError: On connection failures after all retry attempts
         """
         url = urljoin(self.base_url, endpoint.lstrip('/'))
 
@@ -330,12 +413,48 @@ class KATOClient:
         if params is not None:
             kwargs['params'] = params
 
-        # Retry loop with session recreation
+        # Retry loop with session recreation and connection handling
         for attempt in range(self.max_session_recreate_attempts):
             try:
                 response = self._http_session.request(method, url, **kwargs)
                 response.raise_for_status()
                 return response.json()
+
+            except requests.exceptions.ConnectionError as e:
+                # Connection refused - likely KATO service restarting (e.g., uvicorn limit hit)
+                # Don't retry on last attempt
+                if attempt >= self.max_session_recreate_attempts - 1:
+                    raise
+
+                # Wait for KATO service to become healthy
+                # Note: Using print instead of logging for visibility in notebooks
+                print(f"⚠️  KATO service connection lost (attempt {attempt + 1}/{self.max_session_recreate_attempts})")
+                print(f"   Likely cause: Service restart (uvicorn --limit-max-requests)")
+                print(f"   Waiting for service to become healthy...")
+
+                if self._wait_for_kato_healthy(max_wait=30):
+                    print(f"   ✓ Service healthy, recreating session and retrying...")
+
+                    # Recreate session (old session is lost after restart)
+                    try:
+                        # Don't try to recover STM state - service restarted so it's lost
+                        old_session_id = self._session_id
+                        self._create_session()
+
+                        # Update URL with new session_id if endpoint contains session reference
+                        if self._session_id and old_session_id in url:
+                            url = url.replace(old_session_id, self._session_id)
+
+                        # Exponential backoff before retry
+                        backoff_time = 0.5 * (2 ** attempt)
+                        time.sleep(backoff_time)
+                        continue  # Retry the request
+                    except Exception as create_error:
+                        print(f"   ✗ Session recreation failed: {str(create_error)[:100]}")
+                        raise e
+                else:
+                    print(f"   ✗ Service did not become healthy within 30s")
+                    raise e
 
             except requests.HTTPError as e:
                 # Check if this is a 404 error (session not found)
@@ -366,25 +485,6 @@ class KATOClient:
                     raise
 
     # ========================================================================
-    # Properties
-    # ========================================================================
-
-    @property
-    def session_id(self) -> str:
-        """
-        Get the current session ID.
-
-        Returns:
-            The session identifier string
-
-        Example:
-            >>> client = KATOClient(node_id="user123")
-            >>> print(client.session_id)
-            'SESSION|abc123...'
-        """
-        return self._session_id
-
-    # ========================================================================
     # Root Endpoint
     # ========================================================================
 
@@ -406,6 +506,53 @@ class KATOClient:
     # ========================================================================
     # Session Management (Internal)
     # ========================================================================
+
+    def get_session_info(self) -> Dict[str, Any]:
+        """
+        Get complete session information including configuration.
+
+        This returns the ACTUAL session configuration that's being used,
+        not the processor's default genes.
+
+        Returns:
+            Dictionary with:
+            - session_id: Session identifier
+            - node_id: Node this session is connected to
+            - created_at: Session creation timestamp
+            - expires_at: Session expiration timestamp
+            - ttl_seconds: Remaining time to live
+            - metadata: Session metadata
+            - session_config: Current session configuration (THIS is what matters!)
+
+        Example:
+            >>> info = client.get_session_info()
+            >>> print(info['session_config']['recall_threshold'])
+            0.6  # This is the ACTUAL value being used
+        """
+        return self._request('GET', f'/sessions/{self._session_id}')
+
+    def get_session_config(self) -> Dict[str, Any]:
+        """
+        Get the current session configuration.
+
+        This is the ACTUAL configuration being used for this session's operations.
+        Use this instead of get_gene() to check your session's config.
+
+        Returns:
+            Dictionary of session configuration parameters
+
+        Example:
+            >>> config = client.get_session_config()
+            >>> print(config['recall_threshold'])
+            0.6  # The value you set when creating the client
+
+            >>> # Compare to get_gene (WRONG - returns processor default):
+            >>> gene = client.get_gene('recall_threshold')
+            >>> print(gene['value'])
+            0.1  # This is NOT what your session is using!
+        """
+        info = self.get_session_info()
+        return info.get('session_config', {})
 
     def extend_session(self, ttl_seconds: int = 3600) -> Dict[str, Any]:
         """
@@ -546,23 +693,6 @@ class KATOClient:
         """
         return self._request('POST', f'/sessions/{self._session_id}/clear-stm')
 
-    def clear_all_memory(self) -> Dict[str, Any]:
-        """
-        Clear ALL memory (STM + LTM/knowledgebase).
-
-        This removes all learned patterns and clears the short-term memory.
-        Use this to reset the node to a completely fresh state.
-
-        Returns:
-            Status response
-
-        Example:
-            >>> result = client.clear_all_memory()
-            >>> print(result['status'])
-            'cleared'
-        """
-        return self._request('POST', f'/sessions/{self._session_id}/clear-all')
-
     def observe_sequence(
         self,
         observations: List[Dict[str, Any]],
@@ -617,114 +747,101 @@ class KATOClient:
         return self._request('GET', f'/sessions/{self._session_id}/predictions')
 
     # ========================================================================
-    # Gene and Pattern Management
+    # Configuration Management
     # ========================================================================
+    # NOTE: All methods operate on this client's node (self.node_id).
+    # To access multiple nodes, create multiple KATOClient instances.
 
-    def update_genes(
+    def update_session_config(
         self,
-        genes: Dict[str, Any],
-        node_id: Optional[str] = None
+        config: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Update processor genes/configuration.
+        Update session configuration (RECOMMENDED method).
+
+        This is the proper way to update configuration in KATO v2.1.0+.
+        Configuration changes affect this session immediately and persist
+        across requests.
+
+        Available configuration parameters:
+            - max_pattern_length: int (0+) - Auto-learn after N observations
+            - persistence: int (1-100) - Rolling window size for emotives
+            - recall_threshold: float (0.0-1.0) - Pattern matching threshold
+            - stm_mode: str - STM mode 'CLEAR' or 'ROLLING'
+            - indexer_type: str - Vector indexer type
+            - max_predictions: int (1-10000) - Max predictions to return
+            - sort_symbols: bool - Sort symbols alphabetically
+            - process_predictions: bool - Enable prediction processing
+            - use_token_matching: bool - Token-level vs character-level matching
 
         Args:
-            genes: Gene configuration to update (see class docstring for params)
-            node_id: Optional node identifier
+            config: Configuration parameters to update
 
         Returns:
-            Status response
+            Status response with updated configuration
 
         Example:
-            >>> result = client.update_genes(
-            ...     {
-            ...         "max_pattern_length": 5,
-            ...         "recall_threshold": 0.5,
-            ...         "stm_mode": "ROLLING"
-            ...     },
-            ...     node_id="user123"
-            ... )
+            >>> # Update recall threshold for this session
+            >>> result = client.update_session_config({
+            ...     'recall_threshold': 0.1,
+            ...     'max_predictions': 100,
+            ...     'process_predictions': True
+            ... })
+            >>> print(result['status'])
+            'okay'
+
+            >>> # Changes take effect immediately on next operation
+            >>> predictions = client.get_predictions()  # Uses recall_threshold=0.1
         """
-        data = {'genes': genes}
-        params = {'node_id': node_id} if node_id else None
-        return self._request('POST', '/genes/update', data=data, params=params)
-
-    def get_gene(
-        self,
-        gene_name: str,
-        node_id: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        Get a specific gene value.
-
-        Args:
-            gene_name: Name of gene to retrieve
-            node_id: Optional node identifier
-
-        Returns:
-            Gene response with gene name and value
-
-        Example:
-            >>> result = client.get_gene("max_pattern_length", node_id="user123")
-            >>> print(result['value'])
-        """
-        params = {'node_id': node_id} if node_id else None
-        return self._request('GET', f'/gene/{gene_name}', params=params)
+        data = {'config': config}
+        return self._request('POST', f'/sessions/{self._session_id}/config', data=data)
 
     def get_pattern(
         self,
-        pattern_id: str,
-        node_id: Optional[str] = None
+        pattern_id: str
     ) -> Dict[str, Any]:
         """
-        Get a specific pattern by ID.
+        Get a specific pattern by ID from this client's node.
 
         Args:
             pattern_id: Pattern identifier (e.g., "PTRN|a1b2c3...")
-            node_id: Optional node identifier
 
         Returns:
             Pattern data
 
         Example:
-            >>> result = client.get_pattern("PTRN|abc123...", node_id="user123")
+            >>> result = client.get_pattern("PTRN|abc123...")
             >>> print(result['pattern'])
         """
-        params = {'node_id': node_id} if node_id else None
+        params = {'node_id': self.node_id}
         return self._request('GET', f'/pattern/{pattern_id}', params=params)
 
-    def get_percept_data(self, node_id: Optional[str] = None) -> Dict[str, Any]:
+    def get_percept_data(self) -> Dict[str, Any]:
         """
-        Get current percept data from processor.
-
-        Args:
-            node_id: Optional node identifier
+        Get current percept data from this client's node.
 
         Returns:
             Percept data
 
         Example:
-            >>> result = client.get_percept_data(node_id="user123")
+            >>> result = client.get_percept_data()
             >>> print(result['percept_data'])
         """
-        params = {'node_id': node_id} if node_id else None
+        params = {'node_id': self.node_id}
         return self._request('GET', '/percept-data', params=params)
 
-    def get_cognition_data(self, node_id: Optional[str] = None) -> Dict[str, Any]:
+    def get_cognition_data(self) -> Dict[str, Any]:
         """
-        Get current cognition data from processor.
-
-        Args:
-            node_id: Optional node identifier
+        Get current cognition data from this client's node.
 
         Returns:
             Cognition data
 
         Example:
-            >>> result = client.get_cognition_data(node_id="user123")
+            >>> result = client.get_cognition_data()
             >>> print(result['cognition_data'])
         """
-        params = {'node_id': node_id} if node_id else None
+        params = {'node_id': self.node_id}
         return self._request('GET', '/cognition-data', params=params)
 
     # ========================================================================
@@ -964,6 +1081,37 @@ if __name__ == "__main__":
 
     metrics = client.get_metrics()
     print(f"Total requests: {metrics.get('performance', {}).get('total_requests', 0)}")
+
+    client.close()
+
+    # Example 5: Configuration updates
+    print("\n=== Example 5: Dynamic Configuration Updates ===")
+    client = KATOClient(
+        base_url="http://localhost:8000",
+        node_id="config_demo",
+        recall_threshold=0.5,  # Initial config
+        max_predictions=50
+    )
+
+    # Observe and learn some patterns
+    client.observe(strings=["hello", "world"])
+    client.observe(strings=["foo", "bar"])
+    client.learn()
+
+    # Update configuration dynamically
+    print("Updating session configuration...")
+    config_result = client.update_session_config({
+        'recall_threshold': 0.1,  # More permissive matching
+        'max_predictions': 100,   # More predictions
+        'process_predictions': True
+    })
+    print(f"Config updated: {config_result['status']}")
+
+    # New config takes effect immediately
+    client.clear_stm()
+    client.observe(strings=["hello", "world"])
+    predictions = client.get_predictions()  # Uses new recall_threshold=0.1
+    print(f"Got {predictions['count']} predictions with new config")
 
     client.close()
 

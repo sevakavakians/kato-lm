@@ -77,6 +77,27 @@ class NodeSnapshot:
     freq_11_50: int = 0
     freq_50_plus: int = 0
 
+    # NEW: Graph topology (for composition analysis and post-pruning validation)
+    parent_child_edges: Optional[List[Tuple[str, str]]] = None  # [(parent_id, child_id), ...]
+    reusability_histogram: Optional[Dict[int, int]] = None  # {num_parents: count}
+    orphan_count: Optional[int] = None  # Patterns with 0 parents
+    orphan_rate: Optional[float] = None  # orphan_count / total_patterns
+    coverage_to_parent: Optional[float] = None  # % used by parent level
+
+    # NEW: Prediction sample statistics
+    prediction_samples: Optional[Dict[str, Dict[str, float]]] = None
+    # {
+    #   'predictive_information': {'mean': 0.5, 'std': 0.2, 'median': 0.55, ...},
+    #   'potential': {'mean': 0.3, 'std': 0.15, ...},
+    #   'confidence': {'mean': 0.6, ...},
+    #   'similarity': {'mean': 0.7, ...},
+    #   'fanout': {'mean': 15, 'std': 8, ...}
+    # }
+
+    # NEW: Hierarchical frequency validation
+    freq_correlation_to_children: Optional[float] = None  # Spearman correlation
+    freq_compression_ratio: Optional[float] = None  # mean(this_freq) / mean(child_freq)
+
 
 @dataclass
 class TrainingRunSnapshot:
@@ -107,6 +128,10 @@ class TrainingRunSnapshot:
         mongo_uri: str = 'mongodb://localhost:27017/',
         timeout_ms: int = 5000,
         top_n_patterns: int = 10,
+        capture_graph_topology: bool = True,
+        capture_prediction_samples: bool = True,
+        num_prediction_samples: int = 100,
+        validate_hierarchy: bool = True,
         verbose: bool = True
     ) -> 'TrainingRunSnapshot':
         """
@@ -118,6 +143,10 @@ class TrainingRunSnapshot:
             mongo_uri: MongoDB connection string
             timeout_ms: Connection timeout
             top_n_patterns: Number of top patterns to capture
+            capture_graph_topology: Capture parent-child relationships and orphan rates
+            capture_prediction_samples: Sample predictions to measure quality
+            num_prediction_samples: Number of prediction samples to take
+            validate_hierarchy: Validate frequency correlation between levels
             verbose: Print progress
 
         Returns:
@@ -165,6 +194,70 @@ class TrainingRunSnapshot:
                 except Exception as e:
                     if verbose:
                         print(f" ⚠️  Failed: {e}")
+
+            # Second pass: Capture graph topology, predictions, and hierarchy validation
+            if node_snapshots:
+                # Get node names in order (node0, node1, node2, node3)
+                node_names_sorted = sorted(node_snapshots.keys())
+
+                for i, node_name in enumerate(node_names_sorted):
+                    node_snapshot = node_snapshots[node_name]
+                    node_client = learner.nodes[node_name]
+
+                    # Determine parent node (next level up)
+                    parent_node_name = node_names_sorted[i + 1] if i + 1 < len(node_names_sorted) else None
+
+                    if verbose:
+                        print(f"  Analyzing {node_name}...", end='', flush=True)
+
+                    try:
+                        # Capture graph topology
+                        if capture_graph_topology:
+                            parent_db_name = f"{parent_node_name}_kato" if parent_node_name else None
+                            topology = cls._capture_graph_topology(
+                                client=client,
+                                node_name=node_name,
+                                node_db_name=node_snapshot.db_name,
+                                parent_db_name=parent_db_name
+                            )
+                            node_snapshot.parent_child_edges = topology['parent_child_edges']
+                            node_snapshot.reusability_histogram = topology['reusability_histogram']
+                            node_snapshot.orphan_count = topology['orphan_count']
+                            node_snapshot.orphan_rate = topology['orphan_rate']
+                            node_snapshot.coverage_to_parent = topology['coverage_to_parent']
+
+                        # Capture prediction samples
+                        if capture_prediction_samples:
+                            pred_stats = cls._capture_prediction_samples(
+                                node_client=node_client,
+                                num_samples=num_prediction_samples
+                            )
+                            node_snapshot.prediction_samples = pred_stats
+
+                        # Validate hierarchical frequencies (with child level below)
+                        if validate_hierarchy and i > 0:
+                            child_node_name = node_names_sorted[i - 1]
+                            child_snapshot = node_snapshots[child_node_name]
+                            freq_validation = cls._validate_hierarchical_frequencies(
+                                client=client,
+                                child_db_name=child_snapshot.db_name,
+                                parent_db_name=node_snapshot.db_name
+                            )
+                            node_snapshot.freq_correlation_to_children = freq_validation['freq_correlation']
+                            node_snapshot.freq_compression_ratio = freq_validation['freq_compression_ratio']
+
+                        if verbose:
+                            metrics_captured = []
+                            if capture_graph_topology:
+                                metrics_captured.append(f"orphan={node_snapshot.orphan_rate:.1%}")
+                            if capture_prediction_samples and node_snapshot.prediction_samples:
+                                fanout = node_snapshot.prediction_samples.get('fanout', {}).get('mean', 0)
+                                metrics_captured.append(f"fanout={fanout:.1f}")
+                            print(f" ✓ {', '.join(metrics_captured) if metrics_captured else 'done'}")
+
+                    except Exception as e:
+                        if verbose:
+                            print(f" ⚠️  Analysis failed: {e}")
 
             # Compute summary statistics
             total_patterns = sum(ns.total_patterns for ns in node_snapshots.values())
@@ -394,6 +487,258 @@ class TrainingRunSnapshot:
         except Exception:
             # Shannon values not available
             return None, None, None
+
+    @staticmethod
+    def _capture_graph_topology(
+        client: MongoClient,
+        node_name: str,
+        node_db_name: str,
+        parent_db_name: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Capture parent-child relationships and composition statistics.
+
+        Args:
+            client: MongoDB client
+            node_name: Node name (e.g., 'node0')
+            node_db_name: Database name for this node
+            parent_db_name: Database name for parent node (None for top level)
+
+        Returns:
+            Dict with:
+                - parent_child_edges: List of (parent_id, child_id) tuples
+                - reusability_histogram: {num_parents: count}
+                - orphan_count: Number of patterns with 0 parents
+                - orphan_rate: Percentage of orphans
+                - coverage_to_parent: % used by parent level
+        """
+        from collections import defaultdict
+
+        # Query this level's patterns
+        db = client[node_db_name]
+        patterns = db['patterns_kb'].find({}, {'name': 1, '_id': 0})
+        pattern_ids = {p['name'] for p in patterns}
+
+        if not parent_db_name:
+            # Top level (node3) has no parents - all are orphans
+            return {
+                'parent_child_edges': [],
+                'reusability_histogram': {0: len(pattern_ids)},
+                'orphan_count': len(pattern_ids),
+                'orphan_rate': 1.0 if pattern_ids else 0.0,
+                'coverage_to_parent': 0.0
+            }
+
+        # Query parent level patterns and extract child references
+        parent_db = client[parent_db_name]
+        parent_patterns = parent_db['patterns_kb'].find(
+            {}, {'name': 1, 'pattern_data': 1, '_id': 0}
+        )
+
+        edges = []
+        child_parent_count = defaultdict(int)
+
+        for parent_pat in parent_patterns:
+            parent_id = parent_pat['name']
+            pattern_data = parent_pat.get('pattern_data', [])
+
+            # Extract child pattern names from pattern_data
+            # pattern_data = [[child1], [child2], ...]
+            for event in pattern_data:
+                if event and len(event) > 0:
+                    child_id = event[0]  # Each event has one pattern name
+                    if child_id in pattern_ids:  # Validate reference exists
+                        edges.append((parent_id, child_id))
+                        child_parent_count[child_id] += 1
+
+        # Compute reusability statistics
+        reusability_histogram = defaultdict(int)
+        for pattern_id in pattern_ids:
+            num_parents = child_parent_count.get(pattern_id, 0)
+            reusability_histogram[num_parents] += 1
+
+        orphan_count = reusability_histogram.get(0, 0)
+        orphan_rate = orphan_count / len(pattern_ids) if pattern_ids else 0.0
+        coverage = (len(pattern_ids) - orphan_count) / len(pattern_ids) if pattern_ids else 0.0
+
+        return {
+            'parent_child_edges': edges[:1000],  # Limit to 1000 edges for storage
+            'reusability_histogram': dict(reusability_histogram),
+            'orphan_count': orphan_count,
+            'orphan_rate': float(orphan_rate),
+            'coverage_to_parent': float(coverage)
+        }
+
+    @staticmethod
+    def _capture_prediction_samples(
+        node_client: Any,
+        num_samples: int = 100,
+        test_sequence_length: int = 10
+    ) -> Optional[Dict[str, Dict[str, float]]]:
+        """
+        Sample predictions and extract quality metrics.
+
+        Args:
+            node_client: KATO node client
+            num_samples: Number of test samples
+            test_sequence_length: Length of test sequences
+
+        Returns:
+            Aggregated statistics for:
+                - predictive_information
+                - potential
+                - confidence
+                - similarity
+                - fanout (number of predictions)
+        """
+        import random
+        from collections import defaultdict
+
+        # Generate test vocabulary (common words)
+        vocab = ["the", "a", "is", "was", "in", "on", "to", "of", "and", "for",
+                 "it", "with", "as", "at", "by", "from", "an", "be", "this", "that"]
+
+        all_metrics = defaultdict(list)
+
+        for _ in range(num_samples):
+            # Generate random test sequence
+            test_tokens = random.choices(vocab, k=test_sequence_length)
+            test_obs = [{'strings': [tok]} for tok in test_tokens]
+
+            try:
+                # Observe sequence (without learning)
+                for obs in test_obs:
+                    node_client.observe(**obs)
+
+                # Get predictions
+                result = node_client.get_predictions()
+
+                if result and 'predictions' in result:
+                    predictions = result['predictions']
+
+                    # Record fan-out
+                    all_metrics['fanout'].append(len(predictions))
+
+                    # Extract metrics from each prediction
+                    for pred in predictions:
+                        if 'predictive_information' in pred:
+                            all_metrics['predictive_information'].append(pred['predictive_information'])
+                        if 'potential' in pred:
+                            all_metrics['potential'].append(pred['potential'])
+                        if 'confidence' in pred:
+                            all_metrics['confidence'].append(pred['confidence'])
+                        if 'similarity' in pred:
+                            all_metrics['similarity'].append(pred['similarity'])
+                else:
+                    all_metrics['fanout'].append(0)
+
+                # Clear STM for next sample
+                node_client.clear_stm()
+
+            except Exception as e:
+                # Prediction failed, record as zero
+                all_metrics['fanout'].append(0)
+                try:
+                    node_client.clear_stm()
+                except:
+                    pass
+
+        # Compute summary statistics
+        if not all_metrics:
+            return None
+
+        summary = {}
+        for metric_name, values in all_metrics.items():
+            if values:
+                summary[metric_name] = {
+                    'mean': float(np.mean(values)),
+                    'median': float(np.median(values)),
+                    'std': float(np.std(values)),
+                    'min': float(np.min(values)),
+                    'max': float(np.max(values))
+                }
+
+        return summary if summary else None
+
+    @staticmethod
+    def _validate_hierarchical_frequencies(
+        client: MongoClient,
+        child_db_name: str,
+        parent_db_name: str
+    ) -> Dict[str, Optional[float]]:
+        """
+        Validate frequency alignment between parent and child levels.
+
+        For each parent pattern:
+          - Sum frequencies of its child patterns
+          - Compare parent_freq vs sum(child_freqs)
+
+        Args:
+            client: MongoDB client
+            child_db_name: Database name for child level
+            parent_db_name: Database name for parent level
+
+        Returns:
+            Dict with:
+                - freq_correlation: Spearman correlation
+                - freq_compression_ratio: mean(parent_freq) / mean(child_freq)
+        """
+        try:
+            from scipy.stats import spearmanr
+        except ImportError:
+            # scipy not available
+            return {
+                'freq_correlation': None,
+                'freq_compression_ratio': None
+            }
+
+        # Get parent patterns with their children
+        parent_db = client[parent_db_name]
+        parent_patterns = parent_db['patterns_kb'].find(
+            {}, {'name': 1, 'frequency': 1, 'pattern_data': 1, '_id': 0}
+        )
+
+        # Get child frequencies
+        child_db = client[child_db_name]
+        child_freq_map = {}
+        for child_pat in child_db['patterns_kb'].find({}, {'name': 1, 'frequency': 1, '_id': 0}):
+            child_freq_map[child_pat['name']] = child_pat.get('frequency', 0)
+
+        parent_freqs = []
+        child_freq_sums = []
+
+        for parent_pat in parent_patterns:
+            parent_freq = parent_pat.get('frequency', 0)
+            pattern_data = parent_pat.get('pattern_data', [])
+
+            # Sum child frequencies
+            child_sum = 0
+            for event in pattern_data:
+                if event and len(event) > 0:
+                    child_id = event[0]
+                    child_sum += child_freq_map.get(child_id, 0)
+
+            if child_sum > 0:  # Only include if children found
+                parent_freqs.append(parent_freq)
+                child_freq_sums.append(child_sum)
+
+        # Compute statistics
+        if len(parent_freqs) >= 3:
+            correlation, _ = spearmanr(parent_freqs, child_freq_sums)
+
+            mean_parent = np.mean(parent_freqs)
+            mean_child_sum = np.mean(child_freq_sums)
+            compression_ratio = mean_parent / mean_child_sum if mean_child_sum > 0 else 0.0
+
+            return {
+                'freq_correlation': float(correlation) if not np.isnan(correlation) else None,
+                'freq_compression_ratio': float(compression_ratio)
+            }
+        else:
+            return {
+                'freq_correlation': None,
+                'freq_compression_ratio': None
+            }
 
     def save(self, filepath: str):
         """Save snapshot to JSON file"""

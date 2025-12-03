@@ -39,6 +39,17 @@ from .hierarchical_learning import (
     transfer_predictions,
 )
 
+# Hierarchical builder (v2.0 layer-based API)
+from .hierarchical_builder import (
+    HierarchicalLayer,
+    HierarchicalBuilder,
+    HierarchicalModel,
+    process_chunk_at_layer,
+    accumulate_in_stm,
+    learn_from_stm,
+    extract_prediction_field
+)
+
 # Profiling and Performance Analysis (2.0)
 from .profiling_engine import ProfilingEngine, ProfilingReport, ResourceSnapshot
 from .storage_estimator import StorageEstimator, StorageEstimate, LevelStorageEstimate
@@ -127,6 +138,14 @@ __all__ = [
     'transfer_top_n',
     'transfer_weighted',
     'transfer_predictions',
+    # Hierarchical builder (v2.0 layer-based API)
+    'HierarchicalLayer',
+    'HierarchicalBuilder',
+    'HierarchicalModel',
+    'process_chunk_at_layer',
+    'accumulate_in_stm',
+    'learn_from_stm',
+    'extract_prediction_field',
     # Profiling and Performance Analysis (2.0)
     'ProfilingEngine',
     'ProfilingReport',
