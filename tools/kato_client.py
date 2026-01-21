@@ -48,15 +48,15 @@ RESILIENCE (v3.6.0+):
     The client automatically handles KATO service restarts:
 
     - Service restart (uvicorn --limit-max-requests): Detected via ConnectionError
-    - Health check wait: Up to 30 seconds for service to become healthy
+    - Health check wait: Up to 60 seconds for service to become healthy (v3.7.0+)
     - Session recreation: Creates new session with same configuration
     - Transparent retry: Failed request automatically retried (up to 3 attempts)
 
     This means long-running training workloads (1000s of samples) will continue
-    seamlessly even when KATO restarts every ~10,000 requests.
+    seamlessly even when KATO restarts (now every ~100,000 requests instead of 10,000).
 
 Author: KATO Team
-Version: 3.6.0 - Added automatic connection retry and health check verification for service restarts
+Version: 3.7.0 - Improved resilience for long training runs (60s health check, 100k request limit)
 """
 
 import json
@@ -306,12 +306,12 @@ class KATOClient:
             )
             response.raise_for_status()
 
-    def _wait_for_kato_healthy(self, max_wait: int = 30, check_interval: float = 2) -> bool:
+    def _wait_for_kato_healthy(self, max_wait: int = 60, check_interval: float = 2) -> bool:
         """
         Wait for KATO service to become healthy after restart.
 
         Args:
-            max_wait: Maximum seconds to wait for service (default: 30)
+            max_wait: Maximum seconds to wait for service (default: 60, increased for training workloads)
             check_interval: Seconds between health checks (default: 2)
 
         Returns:
@@ -430,9 +430,9 @@ class KATOClient:
                 # Note: Using print instead of logging for visibility in notebooks
                 print(f"⚠️  KATO service connection lost (attempt {attempt + 1}/{self.max_session_recreate_attempts})")
                 print(f"   Likely cause: Service restart (uvicorn --limit-max-requests)")
-                print(f"   Waiting for service to become healthy...")
+                print(f"   Waiting for service to become healthy (timeout: 60s)...")
 
-                if self._wait_for_kato_healthy(max_wait=30):
+                if self._wait_for_kato_healthy(max_wait=60):
                     print(f"   ✓ Service healthy, recreating session and retrying...")
 
                     # Recreate session (old session is lost after restart)
@@ -453,7 +453,7 @@ class KATOClient:
                         print(f"   ✗ Session recreation failed: {str(create_error)[:100]}")
                         raise e
                 else:
-                    print(f"   ✗ Service did not become healthy within 30s")
+                    print(f"   ✗ Service did not become healthy within 60s")
                     raise e
 
             except requests.HTTPError as e:

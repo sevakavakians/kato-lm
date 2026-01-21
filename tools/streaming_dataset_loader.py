@@ -247,29 +247,32 @@ class StreamingDatasetLoader:
         return info
     
     @staticmethod
-    def load_streaming(dataset_key: str, max_samples: int = None) -> Iterator[str]:
+    def load_streaming(dataset_key: str, max_samples: int = None, skip: int = 0) -> Iterator[str]:
         """
         Load dataset in streaming mode.
-        
+
         Args:
             dataset_key: Key from DATASETS dict
             max_samples: Maximum samples to yield (None = unlimited)
-            
+            skip: Number of samples to skip at the beginning (for checkpoint resume)
+
         Yields:
             Text samples from the dataset
         """
         if dataset_key not in StreamingDatasetLoader.DATASETS:
             raise ValueError(f"Unknown dataset: {dataset_key}")
-        
+
         config = StreamingDatasetLoader.DATASETS[dataset_key]
-        
+
         print(f"\n📡 Streaming: {config['description']}")
         print(f"   Dataset: {config['name']}")
+        if skip > 0:
+            print(f"   Skipping: {skip:,} samples (checkpoint resume)")
         if max_samples:
             est = StreamingDatasetLoader.estimate_time(dataset_key, max_samples)
             print(f"   Samples: {max_samples:,}")
             print(f"   Est. Time: {est['time_formatted']}")
-        
+
         try:
             # Load dataset in streaming mode (NO trust_remote_code parameter)
             if config['config']:
@@ -285,7 +288,12 @@ class StreamingDatasetLoader:
                     split='train',
                     streaming=True
                 )
-            
+
+            # Skip samples efficiently using HuggingFace's .skip() method
+            # This is MUCH faster than iterating and discarding
+            if skip > 0:
+                dataset = dataset.skip(skip)
+
             # Yield samples
             count = 0
             for sample in dataset:
@@ -1051,8 +1059,13 @@ class StreamingDatasetLoader:
             except Exception as e:
                 return {'success': False, 'error': str(e), 'worker_id': worker_id}
 
-        # Load dataset stream
-        stream_iterator = StreamingDatasetLoader.load_streaming(dataset_key, max_samples)
+        # Load dataset stream with efficient skip for checkpoint resume
+        # Use HuggingFace's .skip() method instead of iterating and discarding
+        stream_iterator = StreamingDatasetLoader.load_streaming(
+            dataset_key,
+            max_samples,
+            skip=start_idx  # Efficiently skip already-processed samples
+        )
 
         # Initialize worker health monitor
         health_monitor = WorkerHealthMonitor(num_workers, stall_timeout=120.0)
@@ -1076,19 +1089,15 @@ class StreamingDatasetLoader:
             with ThreadPoolExecutor(max_workers=num_workers) as executor:
                 # Process stream in batches with checkpointing
                 futures = []
-                sample_idx = 0
+                # Start from start_idx since we've already skipped in the stream
+                sample_idx = start_idx
 
                 if verbose:
                     progress = tqdm(total=max_samples, desc="Training samples", unit="sample", initial=start_idx)
 
                 # Process stream in batches
                 for sample in stream_iterator:
-                    # Skip if before start_idx (resume)
-                    if sample_idx < start_idx:
-                        sample_idx += 1
-                        continue
-
-                    # Add sample index for metadata
+                    # Add sample index for metadata (correctly reflects position in full dataset)
                     sample['_sample_idx'] = sample_idx
 
                     # Submit to worker (round-robin)
