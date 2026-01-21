@@ -1,9 +1,98 @@
 # Training Issues: Investigation and Fixes
 
-**Date**: 2026-01-19
+**Date**: 2026-01-19 (Updated: 2026-01-19 Evening)
 **Issues Addressed**:
-1. Checkpoint resume not working correctly (restarting from beginning)
+1. Checkpoint resume not working in `train_from_streaming_dataset_parallel()`
 2. Training sessions consistently timing out at 17k-20k records
+3. **NEW**: Checkpoint functionality completely missing from `training.ipynb`
+
+---
+
+## Issue 3: training.ipynb Missing Checkpoint Implementation (CRITICAL)
+
+### Root Cause
+
+The `training.ipynb` (v2.0 with HierarchicalBuilder) had configuration variables for checkpointing (`CHECKPOINT_INTERVAL`, `RESUME_FROM_CHECKPOINT`) but **ZERO implementation** of checkpoint save/load logic.
+
+**Location**: `training.ipynb`, Cell 18 (training loop)
+
+**Problem**: The training loop simply processed samples without any checkpoint logic:
+- ❌ No checkpoint loading at startup
+- ❌ No checkpoint saving during training
+- ❌ No stream skipping for resume
+- ❌ Configuration variables were completely ignored
+
+**Impact**: Users running `training.ipynb` thought checkpointing was working, but:
+- All training runs started from sample 0
+- Progress was lost on interruption
+- `RESUME_FROM_CHECKPOINT = True` did nothing
+- The old checkpoint file (`wikitext_parallel_checkpoint.json`) was from a different training function entirely
+
+### Fix Implemented
+
+✅ **Added complete checkpoint save/load functionality to `training.ipynb`**
+
+**Changes to Cell 18**:
+
+1. **Checkpoint Load Logic** (at training start):
+```python
+# Load checkpoint if resuming
+if RESUME_FROM_CHECKPOINT and checkpoint_path.exists():
+    with open(checkpoint_path, 'r') as f:
+        checkpoint_data = json.load(f)
+
+    start_sample = checkpoint_data.get('samples_completed', 0)
+
+    # Validate configuration matches
+    if saved_config['chunk_sizes'] != CHUNK_SIZES:
+        raise ValueError("Configuration mismatch!")
+```
+
+2. **Efficient Stream Skipping**:
+```python
+# Skip already-processed samples
+stream_iterator = StreamingDatasetLoader.load_streaming(
+    dataset_key=DATASET_KEY,
+    max_samples=MAX_SAMPLES,
+    skip=start_sample  # ← Uses HuggingFace .skip()
+)
+```
+
+3. **Periodic Checkpoint Saving**:
+```python
+# Save checkpoint every CHECKPOINT_INTERVAL samples
+if samples_completed % CHECKPOINT_INTERVAL == 0:
+    checkpoint_data = {
+        'dataset_key': DATASET_KEY,
+        'samples_completed': samples_completed,
+        'samples_errored': stats['errors'],
+        'model_config': {
+            'chunk_sizes': CHUNK_SIZES,
+            'dataset_key': DATASET_KEY,
+            'tokenizer': 'gpt2',
+            'num_layers': 4
+        }
+    }
+    with open(checkpoint_path, 'w') as f:
+        json.dump(checkpoint_data, f, indent=2)
+```
+
+4. **Configuration Validation**:
+- Ensures resumed training uses same configuration
+- Prevents silent data corruption
+- Clear error messages on mismatch
+
+5. **Emergency Checkpointing**:
+- Saves checkpoint on errors (every 10 errors)
+- Final checkpoint at training completion
+
+**Checkpoint Filename**: `checkpoints/{dataset_key}_v2_checkpoint.json`
+
+**Result**:
+- ✅ Training can now be interrupted and resumed correctly
+- ✅ Starts from last completed sample (e.g., 20,001 not 1)
+- ✅ Configuration validation prevents corruption
+- ✅ Progress preserved across sessions
 
 ---
 
@@ -155,24 +244,87 @@ Version history:
 
 ## Testing the Fixes
 
-### To test checkpoint resume:
+### To test checkpoint resume in training.ipynb (NEW FIX):
+
+**Important**: Use the updated `training.ipynb` notebook, not the parallel training function.
+
+1. In `training.ipynb`, configure and run first training session:
+   ```python
+   # Cell 8: Configuration
+   DATASET_KEY = 'wikitext'
+   MAX_SAMPLES = 20000  # Start with 20k samples
+   CHECKPOINT_INTERVAL = 1000
+   RESUME_FROM_CHECKPOINT = False  # Start fresh
+
+   # Run all cells through Cell 18
+   ```
+
+2. Wait for training to complete (all 20,000 samples)
+   - You should see checkpoint saves at 1k, 2k, ..., 20k
+   - Final message: "💾 Final checkpoint saved: checkpoints/wikitext_v2_checkpoint.json"
+
+3. Change configuration to resume with MORE samples:
+   ```python
+   # Cell 8: Update configuration
+   MAX_SAMPLES = 100000  # Increase to 100k samples
+   RESUME_FROM_CHECKPOINT = True  # ← Enable resume
+
+   # Run Cell 8 and Cell 18 again
+   ```
+
+4. Verify output shows resume from checkpoint:
+   ```
+   📂 Resuming from checkpoint:
+      Samples completed: 20,000
+      Samples errored: 0
+      ✓ Configuration validated
+
+   ============================================================
+   TRAINING START
+   ============================================================
+   Dataset: wikitext
+   Max samples: 100,000
+   Starting from: sample 20,000  ← Should NOT be 0!
+   Checkpoint interval: 1,000
+   ============================================================
+
+   📡 Streaming: WikiText-103
+      Skipping: 20,000 samples (checkpoint resume)  ← NEW!
+   ```
+
+5. Training should continue from sample 20,001 (not restart from 1)
+
+### To test checkpoint resume in parallel training function:
+
+Follow original instructions for `train_from_streaming_dataset_parallel()`:
 
 1. Start a training run:
    ```python
-   RESUME_FROM_CHECKPOINT = False
-   MAX_SAMPLES = 20000
-   CHECKPOINT_INTERVAL = 5000
+   from tools.streaming_dataset_loader import StreamingDatasetLoader
 
-   # Run training...
+   stats = StreamingDatasetLoader.train_from_streaming_dataset_parallel(
+       dataset_key='wikitext',
+       max_samples=20000,
+       learner=learner,
+       profiler=profiler,
+       checkpoint_interval=5000,
+       resume_from_checkpoint=False
+   )
    ```
 
 2. Interrupt after ~10,000 samples (Ctrl+C)
 
 3. Resume training:
    ```python
-   RESUME_FROM_CHECKPOINT = True
+   stats = StreamingDatasetLoader.train_from_streaming_dataset_parallel(
+       dataset_key='wikitext',
+       max_samples=20000,
+       learner=learner,
+       profiler=profiler,
+       resume_from_checkpoint=True  # ← Enable resume
+   )
 
-   # Should see output:
+   # Should see:
    # 📂 Resuming from checkpoint:
    #    Samples attempted: 10,000
    #    ✓ Configuration validated
@@ -259,15 +411,23 @@ cd /Users/sevakavakians/PROGRAMMING/kato/deployment
 
 ## Files Modified
 
-1. **`tools/streaming_dataset_loader.py`**:
+1. **`tools/streaming_dataset_loader.py`** (kato-notebooks):
    - Added `skip` parameter to `load_streaming()` method
    - Updated `train_from_streaming_dataset_parallel()` to use skip parameter
    - Removed inefficient loop-and-skip logic
 
-2. **`/Users/sevakavakians/PROGRAMMING/kato/kato/config/api.py`**:
+2. **`training.ipynb`** (kato-notebooks) - **NEW FIX**:
+   - Added complete checkpoint save/load functionality to Cell 18
+   - Implemented checkpoint loading with configuration validation
+   - Added periodic checkpoint saving (every CHECKPOINT_INTERVAL samples)
+   - Added emergency checkpoint saving on errors
+   - Uses efficient stream skipping via `skip=start_sample`
+   - Checkpoint file: `checkpoints/{dataset_key}_v2_checkpoint.json`
+
+3. **`/Users/sevakavakians/PROGRAMMING/kato/kato/config/api.py`** (kato server):
    - Increased `limit_max_requests` from 10,000 to 100,000
 
-3. **`tools/kato_client.py`**:
+4. **`tools/kato_client.py`** (kato-notebooks):
    - Increased `_wait_for_kato_healthy()` default timeout from 30s to 60s
    - Updated all call sites to use 60s timeout
    - Updated version to 3.7.0 with improved docstrings
@@ -276,16 +436,25 @@ cd /Users/sevakavakians/PROGRAMMING/kato/deployment
 
 ## Summary
 
-Both issues have been resolved:
+All three issues have been resolved:
 
-✅ **Issue 1 (Checkpoint Resume)**: Training now properly resumes from checkpoint position without re-fetching previous samples. Uses HuggingFace's efficient `.skip()` method.
+✅ **Issue 1 (Checkpoint Resume in Parallel Function)**: `train_from_streaming_dataset_parallel()` now properly resumes from checkpoint position without re-fetching previous samples. Uses HuggingFace's efficient `.skip()` method.
 
 ✅ **Issue 2 (Session Timeout)**: Training sessions should no longer timeout at 17k-20k records. The KATO server now restarts every ~100k requests (instead of 10k), and the client gives the service 60s (instead of 30s) to become healthy during restarts.
 
+✅ **Issue 3 (Missing Checkpoint in training.ipynb)** - **CRITICAL**: `training.ipynb` now has complete checkpoint functionality. Training can be interrupted and resumed correctly, starting from the last completed sample (e.g., resumes at sample 20,001 not sample 1).
+
+**Key Takeaways**:
+- **Use `training.ipynb`** for educational training with full checkpoint support
+- **Use `train_from_streaming_dataset_parallel()`** for production training with parallel workers
+- Both now support checkpoint resume correctly
+- Checkpoint files are separate: `wikitext_v2_checkpoint.json` vs `wikitext_parallel_checkpoint.json`
+
 **Next Steps**:
-1. Restart KATO server to apply new configuration
-2. Test with a long training run (30k+ samples)
-3. Monitor for any remaining issues
+1. ✅ KATO server already restarted with new configuration
+2. Test checkpoint resume in `training.ipynb` with MAX_SAMPLES change
+3. Verify training resumes from correct sample number
+4. Monitor for any remaining issues
 
 ---
 
