@@ -87,16 +87,16 @@ class HardwareReportV2:
     tier: str
     baseline_rate: float
 
+    # Performance estimates
+    estimated_samples_per_sec: float
+    estimated_tokens_per_sec: float
+    bottleneck_prediction: str  # 'cpu', 'memory', 'disk', 'network', 'none'
+
     # Enhanced benchmarks
     clickhouse_benchmark: Optional[ClickHouseBenchmark] = None
     disk_io_benchmark: Optional[DiskIOBenchmark] = None
     network_benchmark: Optional[NetworkBenchmark] = None
     gpu_info: Optional[GPUInfo] = None
-
-    # Performance estimates
-    estimated_samples_per_sec: float
-    estimated_tokens_per_sec: float
-    bottleneck_prediction: str  # 'cpu', 'memory', 'disk', 'network', 'none'
 
     def print_summary(self):
         """Print human-readable hardware report"""

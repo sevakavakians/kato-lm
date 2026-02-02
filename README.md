@@ -29,40 +29,33 @@ This project has been streamlined for clarity:
 
 ### 📓 **Main Notebooks**
 
-1. **`training_v2.ipynb`** - **NEW! Educational training with explicit KATO API** ⭐
-   - TensorFlow/PyTorch-style layer configuration
-   - Explicit KATO calls visible (observe, learn, get_predictions)
-   - Perfect for learning and experimentation
-   - Flexible metadata handling per layer
-   - Step-by-step educational demos
-
-2. **`training.ipynb`** - Production training on real datasets
+1. **`training.ipynb`** - Production training on real datasets
    - Hardware profiling and analysis
    - Real data from HuggingFace (WikiText, C4, RefinedWeb, etc.)
    - Parallel workers for optimal speed (2-3x speedup)
    - Training history tracking
    - Checkpoint/resume support with config validation
 
-3. **`generation.ipynb`** - Text generation with hierarchical predictions
+2. **`generation.ipynb`** - Text generation with hierarchical predictions
    - Bottom-up activation (input → predictions)
    - Top-down unraveling (patterns → tokens)
    - Explicit KATO API calls (educational)
    - Pattern retrieval from KATO storage
    - ⚠️ **Critical:** Uses `pred['present']` (not `pred['name']`) to avoid token repetition
 
-4. **`analysis.ipynb`** - Analyze learned patterns
+3. **`analysis.ipynb`** - Analyze learned patterns
    - Session-independent analysis (works after kernel restarts)
    - Frequency distributions and visualizations
    - Pattern inspection and cleanup
    - Training run comparisons
 
-5. **`hierarchy_metrics.ipynb`** - Comprehensive hierarchy quality analysis
+4. **`hierarchy_metrics.ipynb`** - Comprehensive hierarchy quality analysis
    - 15 metrics across 6 categories (compression, connectivity, information theory, etc.)
    - Graph topology evaluation
    - Training dynamics visualization
    - Detailed interpretation guide
 
-6. **`hierarchy_dashboard.ipynb`** - Quick hierarchy health check
+5. **`hierarchy_dashboard.ipynb`** - Quick hierarchy health check
    - 5-tier scoring system
    - At-a-glance quality assessment
    - Actionable recommendations

@@ -342,6 +342,13 @@ class HierarchicalModel:
         """
         return self.tokenizer.convert_tokens_to_string(tokens)
 
+    def clear_all_memory(self):
+        """Clear all long-term and short-term memory for all layers."""
+        pass
+        #TODO: fix this.
+        # for layer in self.layers:
+            # layer.client.clear_all()
+    
     def clear_all_stm(self):
         """Clear short-term memory for all layers."""
         for layer in self.layers:
@@ -468,6 +475,58 @@ def learn_from_stm(
     """
     result = kato_client.learn()
     pattern_name = result.get('pattern_name') or result.get('final_learned_pattern', 'UNKNOWN')
+
+    if verbose:
+        print(f"  Learned pattern: {pattern_name[:50]}...")
+
+    return pattern_name
+
+
+def accumulate_and_learn_atomic(
+    symbols: List[str],
+    kato_client: KATOClient,
+    metadata: Optional[Dict[str, Any]] = None,
+    verbose: bool = False
+) -> str:
+    """
+    Atomically accumulate symbols and learn in a single request.
+
+    This is more robust than accumulate_in_stm() + learn_from_stm() because
+    it survives KATO service restarts. When the service restarts between
+    accumulate and learn calls, the STM is lost, causing 400 errors.
+
+    This function uses observe_sequence(learn_at_end=True) which is atomic.
+
+    Educational function that shows explicit KATO calls.
+
+    Args:
+        symbols: List of symbols to accumulate and learn
+        kato_client: KATO client for this layer
+        metadata: Optional metadata to attach to observations
+        verbose: Print progress
+
+    Returns:
+        Learned pattern name
+    """
+    # Build observations (one symbol per event)
+    observations = []
+    for symbol in symbols:
+        obs = {'strings': [symbol]}
+        if metadata:
+            obs['metadata'] = metadata
+        observations.append(obs)
+
+    if verbose:
+        print(f"  Built {len(observations)} observations for atomic learn")
+
+    # Send to KATO with learn_at_end=True (atomic operation)
+    result = kato_client.observe_sequence(
+        observations=observations,
+        learn_at_end=True
+    )
+
+    # Extract pattern name
+    pattern_name = result.get('final_learned_pattern') or result.get('pattern_name', 'UNKNOWN')
 
     if verbose:
         print(f"  Learned pattern: {pattern_name[:50]}...")

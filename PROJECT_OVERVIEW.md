@@ -4,6 +4,12 @@
 
 This project implements **hierarchical concept learning** using multiple KATO nodes to learn abstract representations at different levels of granularity. The system learns patterns in a bottom-up hierarchy where each level's learned patterns become symbolic inputs for the next level, enabling the discovery of increasingly abstract conceptual structures in text data.
 
+This hierarchical pattern scheme allows for rote memorization and playback (or top-down "unravelling") of learned sequences without replacement or hallucinations. It additionally offers complete transparency of trained source data and how the predictions were generated, with real-time updates to knowledge bases, deterministically guaranteeing fixes, corrections, and updates.
+
+This particular implementation strictly uses non-vector based tokens for the symbols derived from a popular tokenization choice to more intuitively illustrate relationships between symbols at each level, within sequences and across sequences. A similar implementation that uses vector embeddings to represent words, and thereby may incorporate word similarity, may be able to provide greater flexibility at the cost of reduced rote memorization.
+
+KATO's deterministic and symbolic nature challenges the opacity of current neural network based transformer models, while allowing for inclusion of the powerful correlation techniques that have made transformers successful.
+
 ## Core Philosophy
 
 **Hierarchical Abstraction Through Pattern Names**
@@ -15,7 +21,7 @@ This creates a cascade of abstraction:
 - **Level 1 (Paragraphs)**: Learns patterns in sentence pattern sequences → produces paragraph pattern names
 - **Level 2 (Chapters)**: Learns patterns in paragraph pattern sequences → produces chapter pattern names
 - **Level 3 (Books)**: Learns patterns in chapter pattern sequences → produces book pattern names
-- **Level N**: Arbitrary depth supported
+- **Level N**: Arbitrary depth supported → as higher level patterns repeat, new nodes can be added to learn them
 
 ## Key Concepts
 
