@@ -4,7 +4,7 @@ A Python implementation of hierarchical concept-based learning using KATO (Knowl
 
 ## Table of Contents
 
-- [Getting Started - New Simplified Structure!](#getting-started---new-simplified-structure-)
+- [Getting Started](#getting-started)
 - [Overview](#overview)
 - [What is Hierarchical Concept Learning?](#what-is-hierarchical-concept-learning)
 - [Architecture](#architecture)
@@ -54,7 +54,7 @@ Read PROJECT_OVERVIEW.md.
 
 - **PROJECT_OVERVIEW.md** - Core concepts and philosophy
 - **CLAUDE.md** - Development instructions
-- **TRAINING_RUN_COMPARISON.md** - How to compare experiments
+- **frequency_analysis/Pattern_Frequency_Analysis.md** - KATO Pattern Frequency Analysis Results
 
 ### 🚀 **Quick Workflow**
 
@@ -84,13 +84,13 @@ Each level learns a **complete pattern** before passing its symbolic representat
 
 ### Key Features
 
-✨ **True Hierarchical Abstraction** - Each level learns increasingly abstract patterns
-🎯 **Concept Boundaries** - Clear separation prevents mixing unrelated concepts
-🔗 **Pattern Name Propagation** - Symbolic compression via `PTRN|<hash>` identifiers
-📊 **Progress Tracking** - Real-time statistics at all levels
-🚀 **Streaming Support** - Process large corpora efficiently
-💾 **Session-Independent Analysis** - Analyze trained models without active sessions
-🗄️ **Persistent Storage** - Training data persists in KATO storage across kernel restarts
+- ✨ **True Hierarchical Abstraction** - Each level learns increasingly abstract patterns
+- 🎯 **Concept Boundaries** - Clear separation prevents mixing unrelated concepts
+- 🔗 **Pattern Name Propagation** - Symbolic compression via `PTRN|<hash>` identifiers
+- 📊 **Progress Tracking** - Real-time statistics at all levels
+- 🚀 **Streaming Support** - Process large corpora efficiently
+- 💾 **Session-Independent Analysis** - Analyze trained models without active sessions
+- 🗄️ **Persistent Storage** - Training data persists in KATO storage across kernel restarts
 
 ## What is Hierarchical Concept Learning?
 
@@ -225,16 +225,17 @@ If you use this implementation in your research, please cite:
 
 For questions and support:
 
-- **Issues**: [GitHub Issues](your-repo-url/issues)
+- **Issues**: [GitHub Issues](https://github.com/sevakavakians/kato-lm/issues)
 - **Documentation**: See `HIERARCHICAL_CONCEPT_LEARNING.md`
-- **KATO Documentation**: `/Users/sevakavakians/PROGRAMMING/kato/docs/`
+- **KATO Documentation**: `https://github.com/sevakavakians/kato/tree/main/docs`
 
 ## Acknowledgments
 
-- Built on KATO (Knowledge Abstraction for Traceable Outcomes) by Sevak Avakians
-- Based on GAIuS (General Autonomous Intelligence using Symbols) architecture by Sevak Avakians
+- Built on KATO (Knowledge Abstraction for Traceable Outcomes) by Sevak Avakians (2025) https://github.com/sevakavakians/kato
+- Based on GAIuS (General Artificial Intelligence using Symbols) neuro-symbolic cognitive architecture created by Sevak Avakians (2008)
 - Uses HuggingFace Transformers for tokenization
 - NLTK for sentence segmentation
+- KATO Dashboard https://github.com/sevakavakians/kato-dashboard
 
 ---
 
