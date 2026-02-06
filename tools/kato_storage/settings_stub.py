@@ -12,14 +12,15 @@ from dataclasses import dataclass
 @dataclass
 class DatabaseConfig:
     """Database configuration."""
-    redis_host: str = 'kato-redis'
-    redis_port: int = 6379
+    # Use environment variables or default to localhost for host machine access
+    redis_host: str = os.getenv('REDIS_HOST', 'localhost')
+    redis_port: int = int(os.getenv('REDIS_PORT', '6379'))
     redis_enabled: bool = True
 
     # ClickHouse settings
-    CLICKHOUSE_HOST: str = 'kato-clickhouse'
-    CLICKHOUSE_PORT: int = 8123
-    CLICKHOUSE_DB: str = 'kato'
+    CLICKHOUSE_HOST: str = os.getenv('CLICKHOUSE_HOST', 'localhost')
+    CLICKHOUSE_PORT: int = int(os.getenv('CLICKHOUSE_PORT', '8123'))
+    CLICKHOUSE_DB: str = os.getenv('CLICKHOUSE_DB', 'kato')
 
     @property
     def REDIS_URL(self):

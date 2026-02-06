@@ -1,0 +1,141 @@
+================================================================================
+KATO Pattern Frequency Analysis Summary
+================================================================================
+
+
+NODE0_KATO
+----------------------------------------
+Total Patterns: 804,286
+Patterns with frequency > 0: 804,286
+Patterns with frequency = 0: 0
+
+Frequency Statistics:
+  Mean: 1.04
+  Median: 1.00
+  Std Dev: 11.65
+  Min: 1
+  Max: 8,950
+
+Percentiles:
+  25th: 1.00
+  50th: 1.00
+  75th: 1.00
+  90th: 1.00
+  95th: 1.00
+  99th: 1.00
+
+Top 10 Frequencies:
+  #1: 8950
+  #2: 4832
+  #3: 1790
+  #4: 1170
+  #5: 607
+  #6: 336
+  #7: 269
+  #8: 251
+  #9: 247
+  #10: 225
+
+
+NODE1_KATO
+----------------------------------------
+Total Patterns: 126,552
+Patterns with frequency > 0: 126,552
+Patterns with frequency = 0: 0
+
+Frequency Statistics:
+  Mean: 1.02
+  Median: 1.00
+  Std Dev: 0.45
+  Min: 1
+  Max: 50
+
+Percentiles:
+  25th: 1.00
+  50th: 1.00
+  75th: 1.00
+  90th: 1.00
+  95th: 1.00
+  99th: 1.00
+
+Top 10 Frequencies:
+  #1: 50
+  #2: 49
+  #3: 35
+  #4: 34
+  #5: 33
+  #6: 33
+  #7: 31
+  #8: 28
+  #9: 28
+  #10: 27
+
+
+NODE2_KATO
+----------------------------------------
+Total Patterns: 36,494
+Patterns with frequency > 0: 36,494
+Patterns with frequency = 0: 0
+
+Frequency Statistics:
+  Mean: 1.00
+  Median: 1.00
+  Std Dev: 0.04
+  Min: 1
+  Max: 3
+
+Percentiles:
+  25th: 1.00
+  50th: 1.00
+  75th: 1.00
+  90th: 1.00
+  95th: 1.00
+  99th: 1.00
+
+Top 10 Frequencies:
+  #1: 3
+  #2: 2
+  #3: 2
+  #4: 2
+  #5: 2
+  #6: 2
+  #7: 2
+  #8: 2
+  #9: 2
+  #10: 2
+
+
+NODE3_KATO
+----------------------------------------
+Total Patterns: 61
+Patterns with frequency > 0: 61
+Patterns with frequency = 0: 0
+
+Frequency Statistics:
+  Mean: 1.00
+  Median: 1.00
+  Std Dev: 0.00
+  Min: 1
+  Max: 1
+
+Percentiles:
+  25th: 1.00
+  50th: 1.00
+  75th: 1.00
+  90th: 1.00
+  95th: 1.00
+  99th: 1.00
+
+Top 10 Frequencies:
+  #1: 1
+  #2: 1
+  #3: 1
+  #4: 1
+  #5: 1
+  #6: 1
+  #7: 1
+  #8: 1
+  #9: 1
+  #10: 1
+
+================================================================================
